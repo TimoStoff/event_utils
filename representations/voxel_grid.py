@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import cv2 as cv
 import torch
 from util.event_util import clip_events_to_bounds, events_bounds_mask
+from .image import events_to_image, events_to_image_torch
 
 def get_voxel_grid_as_image(voxelgrid):
     images = []
@@ -211,7 +212,7 @@ def events_to_voxel(xs, ys, ts, ps, B, sensor_size=(180, 240), temporal_bilinear
     bins = []
     dt = ts[-1]-ts[0]
     t_norm = (ts-ts[0])/dt*(B-1)
-    zeros = np.expand_dims(np.zeros(t_norm.shape[0]), axis=0).transpose()
+    zeros = (np.expand_dims(np.zeros(t_norm.shape[0]), axis=0).transpose()).squeeze()
     for bi in range(B):
         if temporal_bilinear:
             bilinear_weights = np.maximum(zeros, 1.0-np.abs(t_norm-bi))
