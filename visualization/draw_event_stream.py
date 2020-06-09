@@ -1,8 +1,8 @@
 import argparse
 import numpy as np
 import os
-from events_contrast_maximization.tools.read_events import read_memmap_events
-from events_contrast_maximization.utils.event_utils import events_to_image
+from data_formats.read_events import read_memmap_events
+from representations.image import events_to_image
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
@@ -16,14 +16,17 @@ def combine_plotted(root_dir, elev=0, azim=45):
     if elev == 0 and azim == 45:
         pass
 
-def plot_events(xs, ys, ts, ps, save_path, num_compress=0, num_show=1000, size=1, elev=0, azim=45, imgs=[], img_ts=[], show_events=True):
+def plot_events(xs, ys, ts, ps, save_path=None, num_compress=0, num_show=1000,
+        size=1, elev=0, azim=45, imgs=[], img_ts=[], show_events=True):
+    num_show = len(xs) if num_show == -1 else num_show
     skip = max(len(xs)//num_show, 1)
     num_compress = len(xs) if num_compress == -1 else num_compress
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d', proj_type = 'ortho')
-    colors = ['r' if x==0 else 'b' for x in ps]
+    colors = ['r' if p>0 else 'b' for p in ps]
     # Plot events
-    ax.scatter(xs[::skip], ts[::skip], ys[::skip], zdir='z', c=colors[::skip], s=np.ones(xs.shape)*size, alpha=1 if show_events else 0)
+    ax.scatter(xs[::skip], ts[::skip], ys[::skip], zdir='z', c=colors[::skip],
+            s=np.ones(xs.shape)*size, alpha=1 if show_events else 0)
     if len(imgs)>0:
         for img, img_ts in zip(imgs, img_ts):
             if num_compress > 0:
@@ -63,10 +66,13 @@ def plot_events(xs, ys, ts, ps, save_path, num_compress=0, num_show=1000, size=1
     ax.xaxis.set_visible(False)
     ax.axes.get_yaxis().set_visible(False)
 
-    ensure_dir(save_path)
-    plt.savefig(save_path, transparent=True)
-    #plt.show()
-    #plt.savefig(save_path)
+    if show_events:
+        plt.show()
+    else:
+        if save_path is None:
+            raise Exception("No save path given")
+        ensure_dir(save_path)
+        plt.savefig(save_path, transparent=True)
     plt.close()
 
 def plot_events_between_frames(xs, ys, ts, ps, frames, frame_event_idx, save_dir, num_show=1000,
