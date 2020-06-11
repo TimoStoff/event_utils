@@ -67,7 +67,12 @@ def events_to_image_torch(xs, ys, ps,
             xs = xs.long().to(device)
         if ys.dtype is not torch.long:
             ys = ys.long().to(device)
-        img.index_put_((ys, xs), ps, accumulate=True)
+        try:
+            img.index_put_((ys, xs), ps, accumulate=True)
+        except Exception as e:
+            print("Unable to put tensor {} positions ({}, {}) into {}. Range = {},{}".format(
+                ps.shape, ys.shape, xs.shape, img.shape,  torch.max(ys), torch.max(xs)))
+            raise e
     return img
 
 def interpolate_to_image(pxs, pys, dxs, dys, weights, img):

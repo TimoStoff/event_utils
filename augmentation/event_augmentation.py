@@ -61,7 +61,7 @@ def add_random_events(xs, ys, ts, ps, to_add, sort=True, return_merged=True):
     else:
         return xs_new, ys_new, ts_new, ps_new
 
-def remove_events(xs, ys, ts, ps, to_remove):
+def remove_events(xs, ys, ts, ps, to_remove, add_noise=0):
     """
     Remove events randomly
     :param xs: x component of events
@@ -69,13 +69,20 @@ def remove_events(xs, ys, ts, ps, to_remove):
     :param ts: t component of events
     :param ps: p component of events
     :param to_remove: how many events to remove
+    :param add_noise: how many noise events to add (0 by default)
     """
     if to_remove > len(xs):
         return np.array([]), np.array([]), np.array([]), np.array([])
     to_select = len(xs)-to_remove
     idx = np.random.choice(np.arange(len(xs)), size=to_select, replace=False)
-    idx.sort()
-    return xs[idx], ys[idx], ts[idx], ps[idx]
+    if add_noise <= 0:
+        idx.sort()
+        return xs[idx], ys[idx], ts[idx], ps[idx]
+    else:
+        nsx, nsy, nst, nsp = add_random_events(xs, ys, ts, ps, add_noise, sort=False, return_merged=False)
+        new_events = merge_events([[xs[idx], ys[idx], ts[idx], ps[idx]], [nsx, nsy, nst, nsp]])
+        new_events.view('i8,i8,i8,i8').sort(order=['f2'], axis=0)
+        return new_events[:,0], new_events[:,1], new_events[:,2], new_events[:,3],
 
 def add_events(xs, ys, ts, ps, to_add, sort=True, return_merged=True, xy_std = 1.5, ts_std = 0.001, add_noise=0):
     """
@@ -104,8 +111,8 @@ def add_events(xs, ys, ts, ps, to_add, sort=True, return_merged=True, xy_std = 1
     ts_new = np.concatenate(ts_new, axis=0)
     ps_new = np.concatenate(ps_new, axis=0)
     idx = np.random.choice(np.arange(len(xs_new)), size=to_add, replace=False)
-    xs_new = xs_new[idx]
-    ys_new = ys_new[idx]
+    xs_new = np.clip(xs_new[idx], 0, np.max(xs))
+    ys_new = np.clip(ys_new[idx], 0, np.max(ys))
     ts_new = ts_new[idx]
     ps_new = ps_new[idx]
     nsx, nsy, nst, nsp = add_random_events(xs, ys, ts, ps, add_noise, sort=False, return_merged=False)
