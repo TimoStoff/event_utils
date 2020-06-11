@@ -1,5 +1,6 @@
 import numpy as np
 import os
+from base_dataset import BaseVoxelDataset
 
 class MemMapDataset(BaseVoxelDataset):
     """

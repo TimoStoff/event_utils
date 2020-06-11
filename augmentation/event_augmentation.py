@@ -50,7 +50,6 @@ def add_random_events(xs, ys, ts, ps, to_add, sort=True, return_merged=True):
     ys_new = np.random.randint(np.max(ys)+1, size=to_add)
     ts_new = np.random.uniform(np.min(ts), np.max(ts), size=to_add)
     ps_new = (np.random.randint(2, size=to_add))*2-1
-    print(len(xs_new))
     if return_merged:
         new_events = merge_events([[xs_new, ys_new, ts_new, ps_new], [xs, ys, ts, ps]])
         if sort:
@@ -79,7 +78,7 @@ def remove_events(xs, ys, ts, ps, to_remove):
     idx.sort()
     return xs[idx], ys[idx], ts[idx], ps[idx]
 
-def add_events(xs, ys, ts, ps, to_add, sort=True, return_merged=True, xy_std = 1.5, ts_std = 0.001):
+def add_events(xs, ys, ts, ps, to_add, sort=True, return_merged=True, xy_std = 1.5, ts_std = 0.001, add_noise=0):
     """
     Add events in the vicinity of existing events
     :param xs: x component of events
@@ -92,6 +91,7 @@ def add_events(xs, ys, ts, ps, to_add, sort=True, return_merged=True, xy_std = 1
         the orginal input events
     :xy_std: standard deviation of new xy coords
     :ts_std: standard deviation of new timestamp
+    :add_noise: how many random noise events to add
     """
     iters = int(to_add/len(xs))+1
     xs_new, ys_new, ts_new, ps_new = [], [], [], []
@@ -105,8 +105,13 @@ def add_events(xs, ys, ts, ps, to_add, sort=True, return_merged=True, xy_std = 1
     ts_new = np.concatenate(ts_new, axis=0)
     ps_new = np.concatenate(ps_new, axis=0)
     idx = np.random.choice(np.arange(len(xs_new)), size=to_add, replace=False)
+    xs_new = xs_new[idx]
+    ys_new = ys_new[idx]
+    ts_new = ts_new[idx]
+    ps_new = ps_new[idx]
+    nsx, nsy, nst, nsp = add_random_events(xs, ys, ts, ps, add_noise, sort=False, return_merged=False)
     if return_merged:
-        new_events = merge_events([[xs_new, ys_new, ts_new, ps_new], [xs, ys, ts, ps]])
+        new_events = merge_events([[xs_new, ys_new, ts_new, ps_new], [nsx, nsy, nst, nsp]])
     else:
         new_events = events_to_block(xs_new, ys_new, ts_new, ps_new)
     if sort:
@@ -132,6 +137,9 @@ if __name__ == "__main__":
     plot_events(xs[s:s+num], ys[s:s+num], ts[s:s+num], ps[s:s+num], elev=30, num_compress=1000, num_show=-1)
 
     nx, ny, nt, npo = add_events(xs[s:s+num], ys[s:s+num], ts[s:s+num], ps[s:s+num], num_to_add)
+    plot_events(nx, ny, nt, npo, elev=30, num_compress=1000, num_show=-1)
+
+    nx, ny, nt, npo = add_events(xs[s:s+num], ys[s:s+num], ts[s:s+num], ps[s:s+num], num_to_add, add_noise=5000)
     plot_events(nx, ny, nt, npo, elev=30, num_compress=1000, num_show=-1)
 
     nx, ny, nt, npo = add_random_events(xs[s:s+num], ys[s:s+num], ts[s:s+num], ps[s:s+num], 5000)

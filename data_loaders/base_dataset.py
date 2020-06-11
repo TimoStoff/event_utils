@@ -182,7 +182,8 @@ class BaseVoxelDataset(Dataset):
         dt = ts_k-ts_0
 
         item = {'data_source_idx': self.data_source_idx, 'data_path': self.data_path,
-                'timestamp': ts_k, 'dt_between_frames': dt, 'ts_idx0': ts_0, 'ts_idx1': ts_k}
+                'timestamp': ts_k, 'dt_between_frames': dt, 'ts_idx0': ts_0, 'ts_idx1': ts_k,
+                'idx0': idx0, 'idx1': idx1}
         if self.return_voxelgrid:
             voxel = self.get_voxel_grid(xs, ys, ts, ps, combined_voxel_channels=self.combined_voxel_channels)
             voxel = self.transform_voxel(voxel, seed)
