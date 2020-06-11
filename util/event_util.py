@@ -1,4 +1,5 @@
 import numpy as np
+import h5py
 
 def events_bounds_mask(xs, ys, x_min, x_max, y_min, y_max):
     """
@@ -14,3 +15,39 @@ def clip_events_to_bounds(xs, ys, ps, bounds):
     """
     mask = events_bounds_mask(xs, ys, 0, bounds[1], 0, bounds[0])
     return xs*mask, ys*mask, ps*mask
+
+def binary_search_h5_dset(dset, x, l=None, r=None, side='left'):
+    l = 0 if l is None else l
+    r = len(dset)-1 if r is None else r
+    while l <= r:
+        mid = l + (r - l)//2;
+        midval = dset[mid]
+        if midval == x:
+            return mid
+        elif midval < x:
+            l = mid + 1
+        else:
+            r = mid - 1
+    if side == 'left':
+        return l
+    return r
+
+def binary_search_h5_timestamp(hdf_path, l, r, x, side='left'):
+    f = h5py.File(hdf_path, 'r')
+    return binary_search_h5_dset(f['events/ts'], x, l=l, r=r, side=side)
+
+def binary_search_torch_tensor(t, l, r, x, side='left'):
+    if r is None:
+        r = len(t)-1
+    while l <= r:
+        mid = l + (r - l)//2;
+        midval = t[mid]
+        if midval == x:
+            return mid
+        elif midval < x:
+            l = mid + 1
+        else:
+            r = mid - 1
+    if side == 'left':
+        return l
+    return r
