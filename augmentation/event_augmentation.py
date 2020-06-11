@@ -76,6 +76,7 @@ def remove_events(xs, ys, ts, ps, to_remove):
         return np.array([]), np.array([]), np.array([]), np.array([])
     to_select = len(xs)-to_remove
     idx = np.random.choice(np.arange(len(xs)), size=to_select, replace=False)
+    idx.sort()
     return xs[idx], ys[idx], ts[idx], ps[idx]
 
 def add_events(xs, ys, ts, ps, to_add, sort=True, return_merged=True, xy_std = 1.5, ts_std = 0.001):
