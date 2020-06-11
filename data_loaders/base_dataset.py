@@ -6,10 +6,10 @@ import random
 import os
 
 # local modules
-from data_augmentation import Compose, RobustNorm
-from data_util import data_sources
-from representations.voxel_grid import events_to_voxel_torch, events_to_neg_pos_voxel_torch
-from util.util import read_json, write_json
+from .data_augmentation import Compose, RobustNorm
+from .data_util import data_sources
+from ..representations.voxel_grid import events_to_voxel_torch, events_to_neg_pos_voxel_torch
+from ..util.util import read_json, write_json
 
 class BaseVoxelDataset(Dataset):
     """
@@ -101,7 +101,7 @@ class BaseVoxelDataset(Dataset):
 
     def __init__(self, data_path, transforms={}, sensor_resolution=None, num_bins=5,
                  voxel_method=None, max_length=None, combined_voxel_channels=True,
-                 return_events=True, return_voxelgrid=True, return_frame=True, return_prev_frame=False,
+                 return_events=False, return_voxelgrid=True, return_frame=True, return_prev_frame=False,
                  return_flow=True, return_prev_flow=False):
 
         self.num_bins = num_bins
@@ -126,6 +126,7 @@ class BaseVoxelDataset(Dataset):
         if self.sensor_resolution is None or self.has_flow is None or self.t0 is None \
                 or self.tk is None or self.num_events is None or self.frame_ts is None \
                 or self.num_frames is None:
+            print("s_r: {}, h_f={}, t0={}, tk={}, n_e={}, nf={}, s_f={}".format(self.sensor_resolution is None, self.has_flow is None, self.t0 is None, self.tk is None, self.num_events is None, self.frame_ts is None, self.num_frames))
             raise Exception("Dataloader failed to intialize all required members")
 
         self.num_pixels = self.sensor_resolution[0] * self.sensor_resolution[1]
@@ -156,6 +157,20 @@ class BaseVoxelDataset(Dataset):
         if max_length is not None:
             self.length = min(self.length, max_length + 1)
 
+    @staticmethod
+    def preprocess_events(xs, ys, ts, ps):
+        if len(xs) == 0:
+            txs = torch.zeros((1), dtype=torch.float32)
+            tys = torch.zeros((1), dtype=torch.float32)
+            tts = torch.zeros((1), dtype=torch.float32)
+            tps = torch.zeros((1), dtype=torch.float32)
+        else:
+            txs = torch.from_numpy(xs.astype(np.float32))
+            tys = torch.from_numpy(ys.astype(np.float32))
+            tts = torch.from_numpy((ts-ts[0]).astype(np.float32))
+            tps = torch.from_numpy(ps.astype(np.float32))
+        return txs, tys, tts, tps
+
     def __getitem__(self, index, seed=None):
         """
         Get data at index.
@@ -167,18 +182,8 @@ class BaseVoxelDataset(Dataset):
 
         idx0, idx1 = self.get_event_indices(index)
         xs, ys, ts, ps = self.get_events(idx0, idx1)
-        if len(xs) == 0:
-            xs = torch.zeros((1), dtype=torch.float32)
-            ys = torch.zeros((1), dtype=torch.float32)
-            ts = torch.zeros((1), dtype=torch.float32)
-            ps = torch.zeros((1), dtype=torch.float32)
-            ts_0, ts_k = 0, 0
-        else:
-            ts_0, ts_k  = ts[0], ts[-1]
-            xs = torch.from_numpy(xs.astype(np.float32))
-            ys = torch.from_numpy(ys.astype(np.float32))
-            ts = torch.from_numpy((ts-ts_0).astype(np.float32))
-            ps = torch.from_numpy(ps.astype(np.float32))
+        xs, ys, ts, ps = self.preprocess_events(xs, ys, ts, ps)
+        ts_0, ts_k  = ts[0], ts[-1]
         dt = ts_k-ts_0
 
         item = {'data_source_idx': self.data_source_idx, 'data_path': self.data_path,

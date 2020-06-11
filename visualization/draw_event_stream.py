@@ -1,8 +1,8 @@
 import argparse
 import numpy as np
 import os
-from data_formats.read_events import read_memmap_events
-from representations.image import events_to_image
+from ..data_formats.read_events import read_memmap_events
+from ..representations.image import events_to_image
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 

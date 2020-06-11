@@ -1,8 +1,7 @@
-import argparse
 import numpy as np
-from representations.voxel_grid import events_to_neg_pos_voxel
-from data_formats.read_events import read_h5_event_components
-from visualization.draw_event_stream import plot_events
+from ..representations.voxel_grid import events_to_neg_pos_voxel
+from ..data_formats.read_events import read_h5_event_components
+from ..visualization.draw_event_stream import plot_events
 import matplotlib.pyplot as plt
 
 def sample(cdf, ts):
@@ -122,6 +121,7 @@ if __name__ == "__main__":
     """
     Tool to add events to a set of events.
     """
+    import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("path", help="Path to event file")
     parser.add_argument("--output_path", default="/tmp/extracted_data", help="Folder where to put augmented events")
