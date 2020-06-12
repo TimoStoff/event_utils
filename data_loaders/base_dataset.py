@@ -6,7 +6,7 @@ import random
 import os
 
 # local modules
-from .data_augmentation import Compose, RobustNorm
+from .data_augmentation import Compose, RobustNorm, CenterCrop
 from .data_util import data_sources
 from ..representations.voxel_grid import events_to_voxel_torch, events_to_neg_pos_voxel_torch
 from ..util.util import read_json, write_json
@@ -100,7 +100,7 @@ class BaseVoxelDataset(Dataset):
         raise NotImplementedError
 
     def __init__(self, data_path, transforms={}, sensor_resolution=None, num_bins=5,
-                 voxel_method=None, max_length=None, combined_voxel_channels=True,
+                 voxel_method=None, max_length=None, combined_voxel_channels=False,
                  return_events=False, return_voxelgrid=True, return_frame=True, return_prev_frame=False,
                  return_flow=True, return_prev_flow=False):
 
