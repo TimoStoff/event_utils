@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2 as cv
 import torch
-from util.event_util import clip_events_to_bounds, events_bounds_mask
+from ..util.event_util import clip_events_to_bounds, events_bounds_mask
 from .image import events_to_image, events_to_image_torch
 
 def get_voxel_grid_as_image(voxelgrid):

@@ -1,8 +1,7 @@
-import argparse
 import numpy as np
-from representations.voxel_grid import events_to_neg_pos_voxel
-from data_formats.read_events import read_h5_event_components
-from visualization.draw_event_stream import plot_events
+from ..representations.voxel_grid import events_to_neg_pos_voxel
+from ..data_formats.read_events import read_h5_event_components
+from ..visualization.draw_event_stream import plot_events
 import matplotlib.pyplot as plt
 
 def sample(cdf, ts):
@@ -50,7 +49,6 @@ def add_random_events(xs, ys, ts, ps, to_add, sort=True, return_merged=True):
     ys_new = np.random.randint(np.max(ys)+1, size=to_add)
     ts_new = np.random.uniform(np.min(ts), np.max(ts), size=to_add)
     ps_new = (np.random.randint(2, size=to_add))*2-1
-    print(len(xs_new))
     if return_merged:
         new_events = merge_events([[xs_new, ys_new, ts_new, ps_new], [xs, ys, ts, ps]])
         if sort:
@@ -63,7 +61,7 @@ def add_random_events(xs, ys, ts, ps, to_add, sort=True, return_merged=True):
     else:
         return xs_new, ys_new, ts_new, ps_new
 
-def remove_events(xs, ys, ts, ps, to_remove):
+def remove_events(xs, ys, ts, ps, to_remove, add_noise=0):
     """
     Remove events randomly
     :param xs: x component of events
@@ -71,15 +69,22 @@ def remove_events(xs, ys, ts, ps, to_remove):
     :param ts: t component of events
     :param ps: p component of events
     :param to_remove: how many events to remove
+    :param add_noise: how many noise events to add (0 by default)
     """
     if to_remove > len(xs):
         return np.array([]), np.array([]), np.array([]), np.array([])
     to_select = len(xs)-to_remove
     idx = np.random.choice(np.arange(len(xs)), size=to_select, replace=False)
-    idx.sort()
-    return xs[idx], ys[idx], ts[idx], ps[idx]
+    if add_noise <= 0:
+        idx.sort()
+        return xs[idx], ys[idx], ts[idx], ps[idx]
+    else:
+        nsx, nsy, nst, nsp = add_random_events(xs, ys, ts, ps, add_noise, sort=False, return_merged=False)
+        new_events = merge_events([[xs[idx], ys[idx], ts[idx], ps[idx]], [nsx, nsy, nst, nsp]])
+        new_events.view('i8,i8,i8,i8').sort(order=['f2'], axis=0)
+        return new_events[:,0], new_events[:,1], new_events[:,2], new_events[:,3],
 
-def add_events(xs, ys, ts, ps, to_add, sort=True, return_merged=True, xy_std = 1.5, ts_std = 0.001):
+def add_events(xs, ys, ts, ps, to_add, sort=True, return_merged=True, xy_std = 1.5, ts_std = 0.001, add_noise=0):
     """
     Add events in the vicinity of existing events
     :param xs: x component of events
@@ -92,6 +97,7 @@ def add_events(xs, ys, ts, ps, to_add, sort=True, return_merged=True, xy_std = 1
         the orginal input events
     :xy_std: standard deviation of new xy coords
     :ts_std: standard deviation of new timestamp
+    :add_noise: how many random noise events to add
     """
     iters = int(to_add/len(xs))+1
     xs_new, ys_new, ts_new, ps_new = [], [], [], []
@@ -105,8 +111,13 @@ def add_events(xs, ys, ts, ps, to_add, sort=True, return_merged=True, xy_std = 1
     ts_new = np.concatenate(ts_new, axis=0)
     ps_new = np.concatenate(ps_new, axis=0)
     idx = np.random.choice(np.arange(len(xs_new)), size=to_add, replace=False)
+    xs_new = np.clip(xs_new[idx], 0, np.max(xs))
+    ys_new = np.clip(ys_new[idx], 0, np.max(ys))
+    ts_new = ts_new[idx]
+    ps_new = ps_new[idx]
+    nsx, nsy, nst, nsp = add_random_events(xs, ys, ts, ps, add_noise, sort=False, return_merged=False)
     if return_merged:
-        new_events = merge_events([[xs_new, ys_new, ts_new, ps_new], [xs, ys, ts, ps]])
+        new_events = merge_events([[xs_new, ys_new, ts_new, ps_new], [nsx, nsy, nst, nsp]])
     else:
         new_events = events_to_block(xs_new, ys_new, ts_new, ps_new)
     if sort:
@@ -117,6 +128,7 @@ if __name__ == "__main__":
     """
     Tool to add events to a set of events.
     """
+    import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("path", help="Path to event file")
     parser.add_argument("--output_path", default="/tmp/extracted_data", help="Folder where to put augmented events")
@@ -132,6 +144,9 @@ if __name__ == "__main__":
     plot_events(xs[s:s+num], ys[s:s+num], ts[s:s+num], ps[s:s+num], elev=30, num_compress=1000, num_show=-1)
 
     nx, ny, nt, npo = add_events(xs[s:s+num], ys[s:s+num], ts[s:s+num], ps[s:s+num], num_to_add)
+    plot_events(nx, ny, nt, npo, elev=30, num_compress=1000, num_show=-1)
+
+    nx, ny, nt, npo = add_events(xs[s:s+num], ys[s:s+num], ts[s:s+num], ps[s:s+num], num_to_add, add_noise=5000)
     plot_events(nx, ny, nt, npo, elev=30, num_compress=1000, num_show=-1)
 
     nx, ny, nt, npo = add_random_events(xs[s:s+num], ys[s:s+num], ts[s:s+num], ps[s:s+num], 5000)
