@@ -1,7 +1,7 @@
 import argparse
 import numpy as np
 import os
-from data_formats.read_events import read_memmap_events
+from data_formats.read_events import read_memmap_events, read_h5_events_dict
 from representations.image import events_to_image
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
@@ -110,24 +110,38 @@ if __name__ == "__main__":
     parser.add_argument('--hide_events', action='store_true', help='Do not draw events (frames only).')
     args = parser.parse_args()
 
-    events = read_memmap_events(args.path)
+    if os.path.isdir(args.path):
+        events = read_memmap_events(args.path)
 
-    ts = events['t'][:].squeeze()
-    t0 = ts[0]
-    ts = ts-t0
-    frames = (events['images'][args.start_frame+1::])/255
-    frame_idx = events['index'][args.start_frame::]
-    frame_ts = events['frame_stamps'][args.start_frame+1::]-t0
+        ts = events['t'][:].squeeze()
+        t0 = ts[0]
+        ts = ts-t0
+        frames = (events['images'][args.start_frame+1::])/255
+        frame_idx = events['index'][args.start_frame::]
+        frame_ts = events['frame_stamps'][args.start_frame+1::]-t0
 
-    start_idx = np.searchsorted(ts, frame_ts[0])
-    print("Starting from frame {}, event {}".format(args.start_frame, start_idx))
+        start_idx = np.searchsorted(ts, frame_ts[0])
+        print("Starting from frame {}, event {}".format(args.start_frame, start_idx))
 
-    xs = events['xy'][:,0]
-    ys = events['xy'][:,1]
-    ts = ts[:]
-    ps = events['p'][:]
+        xs = events['xy'][:,0]
+        ys = events['xy'][:,1]
+        ts = ts[:]
+        ps = events['p'][:]
 
-    print("Have {} frames".format(frames.shape))
+        print("Have {} frames".format(frames.shape))
+    else:
+        events = read_h5_events_dict(args.path)
+        xs = events['xs']
+        ys = events['ys']
+        ts = events['ts']
+        ps = events['ps']
+        t0 = ts[0]
+        ts = ts-t0
+        frames = events['frames']
+        frame_ts = events['frame_timestamps']-t0
+        frame_end = events['frame_event_indices']
+        frame_start = np.concatenate((np.array([0]), frame_end))
+        frame_idx = np.stack((frame_end, frame_start[0:-1]), axis=1)
 
     num_to_plot = args.num_show if args.num_show >= 0 else len(xs)
     plot_events_between_frames(xs, ys, ts, ps, frames, frame_idx, args.output_path, num_show=args.num_show,

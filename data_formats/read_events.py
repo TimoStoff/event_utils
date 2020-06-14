@@ -56,6 +56,19 @@ def read_memmap_events(memmap_path, skip_frames=1, return_events=False, images_f
                 data["index"] = compute_indices(data["t"], data['frame_stamps'])
     return data
 
+def read_memmap_events_dict(memmap_path, skip_frames=1, return_events=False, images_file = 'images.npy',
+        images_ts_file = 'timestamps.npy', optic_flow_file = 'optic_flow.npy',
+        optic_flow_ts_file = 'optic_flow_timestamps.npy', events_xy_file = 'xy.npy',
+        events_p_file = 'p.npy', events_t_file = 't.npy'):
+    data = read_memmap_events(memmap_path, skip_frames, return_events, images_file, images_ts_file,
+            optic_flow_file, optic_flow_ts_file, events_xy_file, events_p_file, events_t_file)
+    events = {
+            'xs':data['xy'][:,0].squeeze(),
+            'ys':data['xy'][:,1].squeeze(),
+            'ts':events['t'][:].squeeze(),
+            'ps':events['p'][:].squeeze()}
+    return events
+
 def read_h5_events(hdf_path):
     f = h5py.File(hdf_path, 'r')
     if 'events/x' in f:
@@ -72,3 +85,35 @@ def read_h5_event_components(hdf_path):
         return (f['events/x'][:], f['events/y'][:], f['events/ts'][:], np.where(f['events/p'][:], 1, -1))
     else:
         return (f['events/xs'][:], f['events/ys'][:], f['events/ts'][:], np.where(f['events/ps'][:], 1, -1))
+
+def read_h5_events_dict(hdf_path, read_frames=True):
+    f = h5py.File(hdf_path, 'r')
+    if 'events/x' in f:
+        #legacy
+        events = {
+                'xs':f['events/x'][:],
+                'ys':f['events/y'][:],
+                'ts':f['events/ts'][:],
+                'ps':np.where(f['events/p'][:], 1, -1)
+        }
+        return events
+    else:
+        events = {
+                'xs':f['events/xs'][:],
+                'ys':f['events/ys'][:],
+                'ts':f['events/ts'][:],
+                'ps':np.where(f['events/ps'][:], 1, -1)
+                }
+        if read_frames:
+            images = []
+            image_stamps = []
+            image_event_indices = []
+            for key in f['images']:
+                frame = f['images/{}'.format(key)][:]
+                images.append(frame)
+                image_stamps.append(f['images/{}'.format(key)].attrs['timestamp'])
+                image_event_indices.append(f['images/{}'.format(key)].attrs['event_idx'])
+            events['frames'] = np.concatenate(images, axis=2) if len(frame.shape)==3 else np.stack(images, axis=2)
+            events['frame_timestamps'] = np.array(image_stamps)
+            events['frame_event_indices'] = np.array(image_event_indices)
+        return events

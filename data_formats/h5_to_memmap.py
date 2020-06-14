@@ -4,6 +4,17 @@ import numpy as np
 import os, shutil
 import json
 
+class NpEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        else:
+            return super(NpEncoder, self).default(obj)
+
 def find_safe_alternative(output_base_path):
     i = 0
     alternative_path = "{}_{:09d}".format(output_base_path, i)
@@ -23,7 +34,7 @@ def save_additional_data_as_mmap(f, mmap_pth, data):
     if data_key in f.keys():
         num_data = len(f[data_key].keys())
         if num_data > 0:
-            data_keys = f[data_key].keys()
+            data_keys = list(f[data_key].keys())
             data_size = f[data_key][data_keys[0]].attrs['size']
             h, w = data_size[0], data_size[1]
             c = 1 if len(data_size) <= 2 else data_size[2]
@@ -57,7 +68,7 @@ def write_metadata(f, metadata_path):
             val = val.tolist()
         metadata[attr] = val
     with open(metadata_path, 'w') as js:
-        json.dump(metadata, js)
+        json.dump(metadata, js, cls=NpEncoder)
 
 def h5_to_memmap(h5_file_path, output_base_path, overwrite=True):
     output_pth = output_base_path
