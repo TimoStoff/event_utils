@@ -25,14 +25,6 @@ def read_h5_event_components(hdf_path):
     else:
         return (f['events/xs'][:], f['events/ys'][:], f['events/ts'][:], np.where(f['events/ps'][:], 1, -1))
 
-def plot_image(image, lognorm=False, cmap='gray'):
-    if lognorm:
-        image = np.log10(image)
-        cmap='viridis'
-    image = cv.normalize(image, None, 0, 1.0, cv.NORM_MINMAX)
-    plt.imshow(image, cmap=cmap)
-    plt.show()
-
 def get_voxel_grid_as_image(voxelgrid):
     images = []
     splitter = np.ones((voxelgrid.shape[1], 2))*np.max(voxelgrid)

@@ -293,11 +293,3 @@ def events_to_timestamp_image_torch(xs, ys, ts, ps,
     img_pos = img_pos.div(img_pos_cnt)
     img_neg = img_neg.div(img_neg_cnt)
     return img_pos, img_neg #/img_pos_cnt, img_neg/img_neg_cnt
-
-def plot_image(image, lognorm=False, cmap='gray'):
-    if lognorm:
-        image = np.log10(image)
-        cmap='viridis'
-    image = cv.normalize(image, None, 0, 1.0, cv.NORM_MINMAX)
-    plt.imshow(image, cmap=cmap)
-    plt.show()

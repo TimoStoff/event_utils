@@ -7,6 +7,8 @@ from itertools import repeat
 from collections import OrderedDict
 from math import fabs, ceil, floor
 from torch.nn import ZeroPad2d
+import matplotlib.pyplot as plt
+import cv2 as cv
 
 
 def ensure_dir(dirname):
@@ -85,6 +87,13 @@ def format_power(size):
         n += 1
     return size, power_labels[n]
 
+def plot_image(image, lognorm=False, cmap='gray'):
+    if lognorm:
+        image = np.log10(image)
+        cmap='viridis'
+    image = cv.normalize(image, None, 0, 1.0, cv.NORM_MINMAX)
+    plt.imshow(image, cmap=cmap)
+    plt.show()
 
 def flow2bgr_np(disp_x, disp_y, max_magnitude=None):
     """
