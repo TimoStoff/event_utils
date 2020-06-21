@@ -9,34 +9,33 @@ from ..util.util import plot_image
 from .objectives import *
 from .warps import *
 
-def grid_cmax(xs, ys, ts, ps, roi_size=(20,20), step=(20,20), warp=linvel_warp(), obj=variance_objective()):
+def grid_cmax(xs, ys, ts, ps, roi_size=(20,20), step=None, warp=linvel_warp(), obj=variance_objective()):
+    step = roi_size if step is None else step
     resolution = infer_resolution(xs, ys)
     warpfunc = linvel_warp()
-    test = np.array([1,5,2,3,7,10,15,3,8,9])
-    tidx = np.argwhere((test>=3) & (test<8))[:, 0]
-    print(tidx)
-    print(test[tidx])
 
-    for xc in range(0, resolution[0], step[0]):
-        x_roi_idc = np.argwhere((xs>=xc) & (xs<xc+step[0]))[:, 0]
-        print(x_roi_idc.shape)
+    print(int((resolution[0]/step[0])+0.5)*step[0])
+    print(resolution[0])
+    for xc in range(0, resolution[1], step[1]):
+        x_roi_idc = np.argwhere((xs>=xc) & (xs<xc+step[1]))[:, 0]
         y_subset = ys[x_roi_idc]
-        for yc in range(0, resolution[1], step[1]):
-            y_roi_idc = np.argwhere((y_subset>=yc) & (y_subset<yc+step[1]))[:, 0]
+        for yc in range(0, resolution[0], step[0]):
+            bbox = [(xc, yc), (xc+step[1], yc+step[0])]
+            y_roi_idc = np.argwhere((y_subset>=yc) & (y_subset<yc+step[0]))[:, 0]
 
             roi_xs = xs[x_roi_idc][y_roi_idc]
             roi_ys = ys[x_roi_idc][y_roi_idc]
             roi_ts = ts[x_roi_idc][y_roi_idc]
             roi_ps = ps[x_roi_idc][y_roi_idc]
-            img = events_to_image(roi_xs, roi_ys, roi_ps, sensor_size=(180, 240), interpolation=None, padding=False)
-            plot_image(img)
 
             if len(roi_xs) > 0:
-                params = optimize(roi_xs, roi_ys, roi_ts, roi_ps, warp, obj, numeric_grads=False)
+                #params = optimize(roi_xs, roi_ys, roi_ts, roi_ps, warp, obj, numeric_grads=False)
+                params = optimize_contrast(roi_xs, roi_ys, roi_ts, roi_ps, warp, obj, numeric_grads=False, blur_sigma=2.0, img_size=resolution, grid_search_init=True)
+                params = optimize_contrast(roi_xs, roi_ys, roi_ts, roi_ps, warp, obj, numeric_grads=False, blur_sigma=1.0, img_size=resolution, x0=params)
                 print("best params = {}".format(params))
-                iwe, d_iwe = get_iwe(params, roi_xs, roi_ys, roi_ts, roi_ps, warpfunc, resolution, use_polarity=True, compute_gradient=False)
-                #iwe, d_iwe = get_iwe(params, xs, ys, ts, ps, warpfunc, resolution, use_polarity=True, compute_gradient=False)
-                plot_image(iwe)
+                #iwe, d_iwe = get_iwe(params, roi_xs, roi_ys, roi_ts, roi_ps, warpfunc, resolution, use_polarity=True, compute_gradient=False)
+                iwe, d_iwe = get_iwe(params, xs, ys, ts, ps, warpfunc, resolution, use_polarity=True, compute_gradient=False)
+                plot_image(iwe, bbox=bbox)
 
 def draw_objective_function(xs, ys, ts, ps, objective, warpfunc, x_range=(-200, 200), y_range=(-200, 200),
         gt=(0,0), show_gt=True, resolution=20, img_size=(180, 240)):
@@ -73,8 +72,141 @@ def draw_objective_function(xs, ys, ts, ps, objective, warpfunc, x_range=(-200, 
         plt.axvline(x=xloc, color='r', linestyle='--')
     plt.show()
 
+def find_new_range(search_axes, param):
+    """
+    Given a range of search parameters and a parameter, find
+    the new range that encompasses all unsearched domain around
+    the parameter
+    """
+    magnitude = np.abs(param)
+    nearest_idx = np.searchsorted(search_axes, param)
+    if nearest_idx >= len(search_axes)-1:
+        d1 = np.abs(search_axes[-1]-search_axes[-2])
+        d2 = d1
+    elif nearest_idx == 0:
+        d1 = np.abs(search_axes[0]-search_axes[-1])
+        d2 = np.abs(search_axes[0]-search_axes[1])
+    else:
+        d1 = np.abs(search_axes[nearest_idx]-search_axes[nearest_idx-1])
+        d2 = np.abs(search_axes[nearest_idx]-search_axes[nearest_idx+1])
+    param_range = [param-d1, param+d2]
+    return param_range
+
+def recursive_search(xs, ys, ts, ps, warp_function, objective_function, img_size, param_ranges=None,
+        log_scale=True, num_samples_per_param=5, depth=0, th0=10, max_iters=10):
+    """
+    Recursive grid-search optimization as per SOFAS. Searches a grid over a range
+    and then searches a sub-grid, etc, until convergence.
+
+    :param: xs x components of events
+    :param: ys y components of events
+    :param: ts t components of events
+    :param: ps p components of events
+    :param: warp_function the warp function to use
+    :param: objective_function the objective function to use
+    :param: img_size the size of the event camera sensor
+    :param: param_ranges: a list of lists, where each list contains the search range for
+        the given warp function parameter. If None, the default is to search from -100 to 100 for
+        each parameter.
+    :param: log_scale if true, the sample points are drawn from a log scale. This means that
+        the parameter space is searched more frequently near the origin and less frequently at
+        the fringes.
+    :param: num_samples_per_param how many samples to take per parameter. The number of evaluations
+        this method needs to perform is equal to num_samples_per_param^warp_function.dims. Thus,
+        for high dimensional warp functions, it is advised to keep this value low. Must be greater
+        than 5 and odd.
+    :param: depth keeps track of the recursion depth
+    :param: th0 when the subgrid search radius is smaller than th0, convergence is reached.
+    :param: max_iters maximum number of iterations
+    """
+    assert num_samples_per_param%2==1 and num_samples_per_param>=5
+    optimal = grid_search_initial(xs, ys, ts, ps, warp_function, objective_function,
+            img_size, param_ranges=param_ranges, log_scale=log_scale,
+            num_samples_per_param=num_samples_per_param)
+
+    params = optimal["min_params"]
+    new_param_ranges = []
+    max_range = 0
+    for sa, param in zip(optimal["search_axes"], params):
+        new_range = find_new_range(sa, param)
+        new_param_ranges.append(new_range)
+        max_range = np.abs(new_range[1]-new_range[0]) if np.abs(new_range[1]-new_range[0]) > max_range else max_range
+    print("--- Depth={}, range={} ---".format(depth, max_range))
+    if max_range >= th0 and depth < max_iters:
+        return recursive_search(xs,ys,ts,ps,warp_function,objective_function,img_size,
+                param_ranges=new_param_ranges, log_scale=log_scale,
+                num_samples_per_param=num_samples_per_param, depth=depth+1)
+    else:
+        print("SOFAS search: {}".format(optimal["min_params"]))
+        return optimal
+
+
+
+def grid_search_initial(xs, ys, ts, ps, warp_function, objective_function, img_size, param_ranges=None,
+        log_scale=True, num_samples_per_param=5):
+    """
+    Perform a grid search for a good starting candidate.
+    :param: xs x components of events
+    :param: ys y components of events
+    :param: ts t components of events
+    :param: ps p components of events
+    :param: warp_function the warp function to use
+    :param: objective_function the objective function to use
+    :param: img_size the size of the event camera sensor
+    :param: param_ranges: a list of lists, where each list contains the search range for
+        the given warp function parameter. If None, the default is to search from -100 to 100 for
+        each parameter.
+    :param: log_scale if true, the sample points are drawn from a log scale. This means that
+        the parameter space is searched more frequently near the origin and less frequently at
+        the fringes.
+    :param: num_samples_per_param how many samples to take per parameter. The number of evaluations
+        this method needs to perform is equal to num_samples_per_param^warp_function.dims. Thus,
+        for high dimensional warp functions, it is advised to keep this value low.
+    """
+    assert num_samples_per_param%2 == 1
+
+    if log_scale:
+        #Function is sampled from 10^x from 0 to 2
+        scale = np.logspace(0, 2.0, int(num_samples_per_param/2.0)+1)[1:]
+        scale /= scale[-1]
+    else:
+        scale = np.linspace(0, 1.0, int(num_samples_per_param/2.0)+1)[1:]
+
+    if param_ranges is None:
+        param_ranges = []
+        for i in range(warp_function.dims):
+            param_ranges.append([-100, 100])
+
+    axes = []
+    for param_range in param_ranges:
+        rng = param_range[1]-param_range[0]
+        mid = param_range[0] + rng/2.0
+        rescale_pos = np.array(mid+scale*(rng/2.0))
+        rescale_neg = np.array(mid-scale*(rng/2.0))[::-1]
+        rescale = np.concatenate((rescale_neg, np.array([mid]), rescale_pos))
+        axes.append(rescale)
+    grids = np.meshgrid(*axes)
+    coords = np.vstack(map(np.ravel, grids))
+
+    output = {"params":[], "eval": [], "search_axes": axes}
+    best_eval = 0
+    best_params = None
+    for params in zip(*coords):
+        f_eval = objective_function.evaluate_function(params=params, xs=xs, ys=ys, ts=ts, ps=ps,
+                warpfunc=warp_function, img_size=img_size, blur_sigma=1.0)
+        #print("{}: {}".format(params, f_eval))
+        output["params"].append(params)
+        output["eval"].append(f_eval)
+        if f_eval < best_eval:
+            best_eval = f_eval
+            best_params = params
+    output["min_params"] = best_params
+    output["min_func_eval"] = best_eval
+    #print("min @ {}: {}".format(best_params, best_eval))
+    return output
+
 def optimize_contrast(xs, ys, ts, ps, warp_function, objective, optimizer=opt.fmin_bfgs, x0=None,
-        numeric_grads=False, blur_sigma=None, img_size=(180, 240)):
+        numeric_grads=False, blur_sigma=None, img_size=(180, 240), grid_search_init=False):
     """
     Optimize contrast for a set of events
     Parameters:
@@ -96,10 +228,15 @@ def optimize_contrast(xs, ys, ts, ps, warp_function, objective, optimizer=opt.fm
     Returns:
         The max arguments for the warp parameters wrt the objective
     """
+    if grid_search_init and x0 is None:
+        print("-----------")
+        minv = recursive_search(xs, ys, ts, ps, warp_function, objective, img_size, log_scale=False)
+        #minv = grid_search_initial(xs, ys, ts, ps, warp_function, objective, img_size, log_scale=False)
+        x0 = minv["min_params"]
+        print("x0 at {}".format(x0))
+    elif x0 is None:
+        x0 = np.array([0,0])
     args = (xs, ys, ts, ps, warp_function, img_size, blur_sigma)
-    x0 = np.array([0,0])
-    if x0 is None:
-        x0 = np.zeros(warp_function.dims)
     if numeric_grads:
         argmax = optimizer(objective.evaluate_function, x0, args=args, epsilon=1, disp=False)
     else:

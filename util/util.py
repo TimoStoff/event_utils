@@ -8,6 +8,7 @@ from collections import OrderedDict
 from math import fabs, ceil, floor
 from torch.nn import ZeroPad2d
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 import cv2 as cv
 
 
@@ -87,12 +88,18 @@ def format_power(size):
         n += 1
     return size, power_labels[n]
 
-def plot_image(image, lognorm=False, cmap='gray'):
+def plot_image(image, lognorm=False, cmap='gray', bbox=None):
+    fig, ax = plt.subplots(1)
     if lognorm:
         image = np.log10(image)
         cmap='viridis'
     image = cv.normalize(image, None, 0, 1.0, cv.NORM_MINMAX)
-    plt.imshow(image, cmap=cmap)
+    ax.imshow(image, cmap=cmap)
+    if bbox is not None:
+        w = bbox[1][0]-bbox[0][0]
+        h = bbox[1][1]-bbox[0][1]
+        rect = patches.Rectangle((bbox[0]), w, h, linewidth=1, edgecolor='r', facecolor='none')
+        ax.add_patch(rect)
     plt.show()
 
 def flow2bgr_np(disp_x, disp_y, max_magnitude=None):
