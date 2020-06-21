@@ -102,6 +102,22 @@ def plot_image(image, lognorm=False, cmap='gray', bbox=None):
         ax.add_patch(rect)
     plt.show()
 
+def save_image(image, fname=None, lognorm=False, cmap='gray', bbox=None):
+    fname = "/tmp/img.png" if fname is None else fname
+    fig, ax = plt.subplots(1)
+    if lognorm:
+        image = np.log10(image)
+        cmap='viridis'
+    image = cv.normalize(image, None, 0, 1.0, cv.NORM_MINMAX)
+    ax.imshow(image, cmap=cmap)
+    if bbox is not None:
+        w = bbox[1][0]-bbox[0][0]
+        h = bbox[1][1]-bbox[0][1]
+        rect = patches.Rectangle((bbox[0]), w, h, linewidth=1, edgecolor='r', facecolor='none')
+        ax.add_patch(rect)
+    plt.savefig(fname, dpi=150)
+    plt.close()
+
 def flow2bgr_np(disp_x, disp_y, max_magnitude=None):
     """
     Convert an optic flow tensor to an RGB color map for visualization

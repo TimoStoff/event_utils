@@ -5,7 +5,7 @@ import scipy.optimize as opt
 from scipy.ndimage.filters import gaussian_filter
 import torch
 from ..util.event_util import infer_resolution
-from ..util.util import plot_image
+from ..util.util import plot_image, save_image
 from .objectives import *
 from .warps import *
 
@@ -14,8 +14,9 @@ def grid_cmax(xs, ys, ts, ps, roi_size=(20,20), step=None, warp=linvel_warp(), o
     resolution = infer_resolution(xs, ys)
     warpfunc = linvel_warp()
 
-    print(int((resolution[0]/step[0])+0.5)*step[0])
-    print(resolution[0])
+    results_params = []
+    results_rois = []
+    samplenum = 0
     for xc in range(0, resolution[1], step[1]):
         x_roi_idc = np.argwhere((xs>=xc) & (xs<xc+step[1]))[:, 0]
         y_subset = ys[x_roi_idc]
@@ -32,10 +33,13 @@ def grid_cmax(xs, ys, ts, ps, roi_size=(20,20), step=None, warp=linvel_warp(), o
                 #params = optimize(roi_xs, roi_ys, roi_ts, roi_ps, warp, obj, numeric_grads=False)
                 params = optimize_contrast(roi_xs, roi_ys, roi_ts, roi_ps, warp, obj, numeric_grads=False, blur_sigma=2.0, img_size=resolution, grid_search_init=True)
                 params = optimize_contrast(roi_xs, roi_ys, roi_ts, roi_ps, warp, obj, numeric_grads=False, blur_sigma=1.0, img_size=resolution, x0=params)
-                print("best params = {}".format(params))
-                #iwe, d_iwe = get_iwe(params, roi_xs, roi_ys, roi_ts, roi_ps, warpfunc, resolution, use_polarity=True, compute_gradient=False)
-                iwe, d_iwe = get_iwe(params, xs, ys, ts, ps, warpfunc, resolution, use_polarity=True, compute_gradient=False)
-                plot_image(iwe, bbox=bbox)
+                iwe, d_iwe = get_iwe(params, xs, ys, ts, ps, warp, resolution,
+                       use_polarity=True, compute_gradient=False)
+                save_image(iwe, fname="/tmp/img_{:09d}.png".format(samplenum), bbox=[[xc,yc],[xc+step[1],yc+step[0]]])
+                samplenum += 1
+                results_params.append(params)
+                results_rois.append([yc, xc, yc+step[0], xc+step[1]])
+    return results_params, results_rois
 
 def draw_objective_function(xs, ys, ts, ps, objective, warpfunc, x_range=(-200, 200), y_range=(-200, 200),
         gt=(0,0), show_gt=True, resolution=20, img_size=(180, 240)):
