@@ -1,10 +1,12 @@
 import argparse
 import numpy as np
 import os
-from ..data_formats.read_events import read_memmap_events
-from ..representations.image import events_to_image
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+
+from data_formats.read_events import read_memmap_events
+from representations.image import events_to_image
+from util.event_util import clip_events_to_bounds
 
 def ensure_dir(file_path):
     directory = os.path.dirname(file_path)
@@ -17,8 +19,33 @@ def combine_plotted(root_dir, elev=0, azim=45):
         pass
 
 def plot_events(xs, ys, ts, ps, save_path=None, num_compress=0, num_show=1000,
-        size=1, elev=0, azim=45, imgs=[], img_ts=[], show_events=True):
+        size=1, elev=0, azim=45, imgs=[], img_ts=[], show_events=True, crop=None):
+    """
+    Given events, plot these in a spatiotemporal volume.
+    :param: xs x coords of events
+    :param: ys y coords of events
+    :param: ts t coords of events
+    :param: ps p coords of events
+    :param: save_path if set, will save plot to here
+    :param: num_compress will take this number of events from the end
+        and create an event image from these. This event image will
+        be displayed at the end of the spatiotemporal volume
+    :param: num_show sets the number of events to plot. If set to -1
+        will plot all of the events (can be potentially expensive)
+    :param: size sets the size of the plotted events
+    :param: elev sets the elevation of the plot
+    :param: azim sets the azimuth of the plot
+    :param: imgs a list of images to draw into the spatiotemporal volume
+    :param: img_ts a list of the position on the temporal axis where each
+        image from 'imgs' is to be placed (the timestamp of the images, usually)
+    :param: show_events if False, will not plot the events (only images)
+    :param: crop a list of length 4 that sets the crop of the plot (must
+        be in the format [top_left_y, top_left_x, height, width]
+    """
+    xs, ys, ts, ps = clip_events_to_bounds(xs, ys, ts, ps, crop, set_zero=False)
+    img_size = [max(ys), max(xs)] if len(imgs)==0 else imgs[0].shape[0:2]
     num_show = len(xs) if num_show == -1 else num_show
+    crop = [0, 0, img_size[0], img_size[1]] if crop is None else crop
     skip = max(len(xs)//num_show, 1)
     num_compress = len(xs) if num_compress == -1 else num_compress
     fig = plt.figure()
@@ -76,7 +103,7 @@ def plot_events(xs, ys, ts, ps, save_path=None, num_compress=0, num_show=1000,
     plt.close()
 
 def plot_events_between_frames(xs, ys, ts, ps, frames, frame_event_idx, save_dir, num_show=1000,
-        skip_frames=5, show_skipped=True, elev=0, azim=0, show_events=True):
+        skip_frames=5, show_skipped=True, elev=0, azim=0, show_events=True, crop=None):
     prev_idx = 0
     for i in range(0, len(frames), skip_frames):
         if show_skipped:
@@ -92,7 +119,8 @@ def plot_events_between_frames(xs, ys, ts, ps, frames, frame_event_idx, save_dir
             img_ts.append(ts[f_idx[1]])
         fname = os.path.join(save_dir, "events_{:09d}.png".format(i))
         plot_events(xs[s:e], ys[s:e], ts[s:e], ps[s:e], save_path=fname, num_show=num_show,
-                imgs=frame, img_ts=img_ts, num_compress=0, show_events=show_events, azim=azim, elev=elev)
+                imgs=frame, img_ts=img_ts, num_compress=0, show_events=show_events, azim=azim,
+                elev=elev, crop=crop)
 
 if __name__ == "__main__":
     """
@@ -144,6 +172,7 @@ if __name__ == "__main__":
         frame_idx = np.stack((frame_end, frame_start[0:-1]), axis=1)
 
     num_to_plot = args.num_show if args.num_show >= 0 else len(xs)
+    crop = [0, 0, 50, 50]
     plot_events_between_frames(xs, ys, ts, ps, frames, frame_idx, args.output_path, num_show=args.num_show,
             skip_frames=args.skip_frames, show_skipped=not args.hide_skipped, azim=args.azim, elev=args.elev,
-            show_events=not args.hide_events)
+            show_events=not args.hide_events, crop=crop)

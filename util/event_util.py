@@ -13,12 +13,38 @@ def events_bounds_mask(xs, ys, x_min, x_max, y_min, y_max):
     mask *= np.where(np.logical_or(ys<=y_min, ys>y_max), 0.0, 1.0)
     return mask
 
-def clip_events_to_bounds(xs, ys, ps, bounds):
+def clip_events_to_bounds(xs, ys, ts, ps, bounds, set_zero=False):
     """
-    Clip events to the given bounds
+    Clip events to the given bounds.
+    :param: xs x coords of events
+    :param: ys y coords of events
+    :param: ts t coords of events (may be None)
+    :param: ps p coords of events (may be None)
+    :param: bounds the bounds of the events. Must be list of
+        length 2 (in which case the lower bound is assumed to be 0,0)
+        or length 4, in format [min_y, min_x, max_y, max_x]
+    :param: set_zero if True, simply multiplies the out of bounds events with 0 mask.
+        Otherwise, removes the events.
     """
-    mask = events_bounds_mask(xs, ys, 0, bounds[1], 0, bounds[0])
-    return xs*mask, ys*mask, ps*mask
+    if len(bounds) == 2:
+        bounds = [0, 0, bounds[0], bounds[1]]
+    elif len(bounds) != 4:
+        raise Exception("Bounds must be of length 2 or 4 (not {})".format(len(bounds)))
+    if set_zero:
+        mask = events_bounds_mask(xs, ys, bounds[1], bounds[3], bounds[0], bounds[2])
+        ts_mask = None if ts is None else ts*mask
+        ps_mask = None if ps is None else ps*mask
+        return xs*mask, ys*mask, ts_mask, ps_mask
+    else:
+        x_clip_idc = np.argwhere((xs >= bounds[1]) & (xs < bounds[3]))[:, 0]
+        y_subset = ys[x_clip_idc]
+        y_clip_idc = np.argwhere((y_subset >= bounds[0]) & (y_subset < bounds[2]))[:, 0]
+
+        xs_clip = xs[x_clip_idc][y_clip_idc]
+        ys_clip = ys[x_clip_idc][y_clip_idc]
+        ts_clip = None if ts is None else ts[x_clip_idc][y_clip_idc]
+        ps_clip = None if ps is None else ps[x_clip_idc][y_clip_idc]
+        return xs_clip, ys_clip, ts_clip, ps_clip
 
 def binary_search_h5_dset(dset, x, l=None, r=None, side='left'):
     l = 0 if l is None else l
