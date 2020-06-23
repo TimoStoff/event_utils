@@ -4,15 +4,18 @@ from ..util.event_util import *
 from ..representations.image import *
 from scipy.ndimage.filters import gaussian_filter
 from abc import ABC, abstractmethod
+from ..util.util import plot_image
+import cv2 as cv
 
 class objective_function(ABC):
 
     def __init__(self, name="template", use_polarity=True,
-            has_derivative=True, default_blur=1.0):
+            has_derivative=True, default_blur=1.0, adaptive_lifespan=False):
         self.name = name
         self.use_polarity = use_polarity
         self.has_derivative = has_derivative
         self.default_blur = default_blur
+        self.adaptive_lifespan = adaptive_lifespan
         super().__init__()
 
     @abstractmethod
@@ -54,6 +57,21 @@ class objective_function(ABC):
         #return grad
         pass
 
+def find_lifespan(ts, params, pixel_crossings):
+    magnitude = np.linalg.norm(params)
+    dt = pixel_crossings/magnitude
+    s_idx = np.searchsorted(ts, ts[-1]-dt)
+    return dt, s_idx
+
+def cut_events_to_lifespan(xs, ys, ts, ps, params, pixel_crossings, minimum_events=10000):
+    magnitude = np.linalg.norm(params)
+    dt = pixel_crossings/magnitude
+    s_idx = np.searchsorted(ts, ts[-1]-dt)
+    num_events = len(xs)-s_idx
+    s_idx = len(xs)-minimum_events if num_events < minimum_events else s_idx
+    #print("Magnitude: {:.2f} pix/s. dt({:.2f} pix)={}. New range is {}:{}={} events".format(magnitude, pixel_crossings, dt, s_idx, len(xs), len(xs)-s_idx))
+    return xs[s_idx:-1], ys[s_idx:-1], ts[s_idx:-1], ps[s_idx:-1]
+
 def get_iwe(params, xs, ys, ts, ps, warpfunc, img_size, compute_gradient=False, use_polarity=True):
     """
     Given a set of parameters, events and warp function, get the warped image and derivative image
@@ -75,19 +93,29 @@ class variance_objective(objective_function):
     """
     Variance objective from 'Gallego, Accurate Angular Velocity Estimation with an Event Camera, RAL'17'
     """
-    def __init__(self):
+    def __init__(self, adaptive_lifespan=False, minimum_events=10000):
         self.use_polarity = True
         self.name = "variance"
         self.has_derivative = True
         self.default_blur=1.0
+        self.adaptive_lifespan = adaptive_lifespan
+        self.pixel_crossings = 5
+        self.minimum_events = minimum_events
+        self.current_num_events = -1
+        self.div = 1.
 
     def evaluate_function(self, params=None, xs=None, ys=None, ts=None, ps=None,
             warpfunc=None, img_size=None, blur_sigma=None, showimg=False, iwe=None):
         """
         Loss given by var(g(x)) where g(x) is IWE
         """
+        print("Eval")
         if iwe is None:
+            #if self.adaptive_lifespan:
+            #    s = 0 if self.current_num_events == -1 else len(xs)-self.current_num_events
+            #    xs, ys, ts, ps = xs[s:-1], ys[s:-1], ts[s:-1], ps[s:-1]
             iwe, d_iwe = get_iwe(params, xs, ys, ts, ps, warpfunc, img_size, use_polarity=self.use_polarity, compute_gradient=False)
+            #iwe /= self.div
         blur_sigma=self.default_blur if blur_sigma is None else blur_sigma
         if blur_sigma > 0:
             iwe = gaussian_filter(iwe, blur_sigma)
@@ -99,17 +127,26 @@ class variance_objective(objective_function):
         """
         Gradient given by 2*(g(x)-mu(g(x))*(g'(x)-mu(g'(x))) where g(x) is the IWE
         """
+        print("Grad:")
         if iwe is None or d_iwe is None:
+            #if self.adaptive_lifespan:
+            #    xs, ys, ts, ps = cut_events_to_lifespan(xs, ys, ts, ps, params, self.pixel_crossings, minimum_events=self.minimum_events)
+            #    self.current_start_idx = len(xs)
             iwe, d_iwe = get_iwe(params, xs, ys, ts, ps, warpfunc, img_size, use_polarity=self.use_polarity, compute_gradient=True)
+            #iwe /= self.div
+            #iwe, d_iwe = iwe/len(xs), d_iwe/len(xs)
         blur_sigma=self.default_blur if blur_sigma is None else blur_sigma
         if blur_sigma > 0:
             d_iwe = gaussian_filter(d_iwe, blur_sigma)
 
         gradient = []
         zero_mean = 2.0*(iwe-np.mean(iwe))
+        img_component = 2.0*(iwe-np.mean(iwe))
         for grad_dim in range(d_iwe.shape[0]):
             mean_jac = d_iwe[grad_dim]-np.mean(d_iwe[grad_dim])
-            gradient.append(np.mean(zero_mean*(d_iwe[grad_dim]-np.mean(d_iwe[grad_dim]))))
+            #gradient.append(np.mean(zero_mean*(d_iwe[grad_dim]-np.mean(d_iwe[grad_dim]))))
+            #gradient.append((np.mean(zero_mean*(d_iwe[grad_dim]-np.mean(d_iwe[grad_dim])))))
+            gradient.append(np.mean(img_component*d_iwe[grad_dim]))
         grad = np.array(gradient)
         return -grad
 
@@ -161,11 +198,16 @@ class sos_objective(objective_function):
     Maximization and Reward Functions: an Analysis, CVPR19)
     """
 
-    def __init__(self):
+    def __init__(self, adaptive_lifespan=False, minimum_events=10000):
         self.use_polarity = True
         self.name = "sos"
         self.has_derivative = True
         self.default_blur=1.0
+        self.adaptive_lifespan = adaptive_lifespan
+        self.pixel_crossings = 5
+        self.minimum_events = minimum_events
+        self.current_num_events = minimum_events
+        self.div = 1
 
     def evaluate_function(self, params=None, xs=None, ys=None, ts=None, ps=None,
             warpfunc=None, img_size=None, blur_sigma=None, showimg=False, iwe=None):
@@ -174,10 +216,11 @@ class sos_objective(objective_function):
         """
         if iwe is None:
             iwe, d_iwe = get_iwe(params, xs, ys, ts, ps, warpfunc, img_size, use_polarity=self.use_polarity, compute_gradient=False)
+            iwe /= self.div
         blur_sigma=self.default_blur if blur_sigma is None else blur_sigma
         if blur_sigma > 0:
             iwe = gaussian_filter(iwe, blur_sigma)
-        sos = np.mean(iwe*iwe)#/num_pix
+        sos = np.mean(iwe*iwe)
         return -sos
 
     def evaluate_gradient(self, params=None, xs=None, ys=None, ts=None, ps=None,
@@ -186,13 +229,14 @@ class sos_objective(objective_function):
         Gradient given by 2*g(x)*g'(x) where g(x) is IWE
         """
         if iwe is None or d_iwe is None:
+            _, self.start = find_lifespan(ts, params, self.pixel_crossings)
             iwe, d_iwe = get_iwe(params, xs, ys, ts, ps, warpfunc, img_size, use_polarity=self.use_polarity, compute_gradient=True)
         blur_sigma=self.default_blur if blur_sigma is None else blur_sigma
         if blur_sigma > 0:
             d_iwe = gaussian_filter(d_iwe, blur_sigma)
 
         gradient = []
-        img_component = 2.0*iwe
+        img_component = (iwe*2.0)/(self.div*self.div)
         for grad_dim in range(d_iwe.shape[0]):
             gradient.append(np.mean(d_iwe[grad_dim]*img_component))
         grad = np.array(gradient)

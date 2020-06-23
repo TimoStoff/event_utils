@@ -102,6 +102,26 @@ def plot_image(image, lognorm=False, cmap='gray', bbox=None):
         ax.add_patch(rect)
     plt.show()
 
+def plot_image_grid(images, grid_shape=None, lognorm=False, cmap='gray', bbox=None):
+    if grid_shape is None:
+        grid_shape = [1, len(images)]
+
+    col = []
+    img_idx = 0
+    for xc in range(grid_shape[0]):
+        row = []
+        for yc in range(grid_shape[1]):
+            image = images[img_idx]
+            if lognorm:
+                image = np.log10(image)
+                cmap='viridis'
+            image = cv.normalize(image, None, 0, 1.0, cv.NORM_MINMAX)
+            row.append(image)
+            img_idx += 1
+        col.append(np.concatenate(row, axis=1))
+    comp_img = np.concatenate(col, axis=0)
+    plot_image(comp_img)
+
 def save_image(image, fname=None, lognorm=False, cmap='gray', bbox=None):
     fname = "/tmp/img.png" if fname is None else fname
     fig, ax = plt.subplots(1)

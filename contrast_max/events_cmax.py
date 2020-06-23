@@ -9,13 +9,15 @@ from ..util.util import plot_image, save_image
 from .objectives import *
 from .warps import *
 
-def grid_cmax(xs, ys, ts, ps, roi_size=(20,20), step=None, warp=linvel_warp(), obj=variance_objective()):
+def grid_cmax(xs, ys, ts, ps, roi_size=(20,20), step=None, warp=linvel_warp(),
+        obj=variance_objective(adaptive_lifespan=True, minimum_events=105)):
     step = roi_size if step is None else step
     resolution = infer_resolution(xs, ys)
     warpfunc = linvel_warp()
 
     results_params = []
     results_rois = []
+    results_f_evals = []
     samplenum = 0
     for xc in range(0, resolution[1], step[1]):
         x_roi_idc = np.argwhere((xs>=xc) & (xs<xc+step[1]))[:, 0]
@@ -33,13 +35,18 @@ def grid_cmax(xs, ys, ts, ps, roi_size=(20,20), step=None, warp=linvel_warp(), o
                 #params = optimize(roi_xs, roi_ys, roi_ts, roi_ps, warp, obj, numeric_grads=False)
                 params = optimize_contrast(roi_xs, roi_ys, roi_ts, roi_ps, warp, obj, numeric_grads=False, blur_sigma=2.0, img_size=resolution, grid_search_init=True)
                 params = optimize_contrast(roi_xs, roi_ys, roi_ts, roi_ps, warp, obj, numeric_grads=False, blur_sigma=1.0, img_size=resolution, x0=params)
-                iwe, d_iwe = get_iwe(params, xs, ys, ts, ps, warp, resolution,
+                print("Final optimization param: {}".format(params))
+                #xsc, ysc, tsc, psc = cut_events_to_lifespan(xs, ys, ts, ps, params, 10)
+                xsc, ysc, tsc, psc = xs, ys, ts, ps
+                iwe, d_iwe = get_iwe(params, xsc, ysc, tsc, psc, warp, resolution,
                        use_polarity=True, compute_gradient=False)
-                save_image(iwe, fname="/tmp/img_{:09d}.png".format(samplenum), bbox=[[xc,yc],[xc+step[1],yc+step[0]]])
+                plot_image(iwe, bbox=[[xc,yc],[xc+step[1],yc+step[0]]])
+                #save_image(iwe, fname="/tmp/vis/img_{:09d}.png".format(samplenum), bbox=[[xc,yc],[xc+step[1],yc+step[0]]])
                 samplenum += 1
                 results_params.append(params)
                 results_rois.append([yc, xc, yc+step[0], xc+step[1]])
-    return results_params, results_rois
+                results_f_evals.append(obj.evaluate_function(iwe=iwe))
+    return results_params, results_f_evals, results_rois
 
 def draw_objective_function(xs, ys, ts, ps, objective, warpfunc, x_range=(-200, 200), y_range=(-200, 200),
         gt=(0,0), show_gt=True, resolution=20, img_size=(180, 240)):
@@ -97,7 +104,7 @@ def find_new_range(search_axes, param):
     return param_range
 
 def recursive_search(xs, ys, ts, ps, warp_function, objective_function, img_size, param_ranges=None,
-        log_scale=True, num_samples_per_param=5, depth=0, th0=10, max_iters=10):
+        log_scale=True, num_samples_per_param=5, depth=0, th0=10, max_iters=4):
     """
     Recursive grid-search optimization as per SOFAS. Searches a grid over a range
     and then searches a sub-grid, etc, until convergence.
@@ -235,6 +242,7 @@ def optimize_contrast(xs, ys, ts, ps, warp_function, objective, optimizer=opt.fm
     if grid_search_init and x0 is None:
         print("-----------")
         minv = recursive_search(xs, ys, ts, ps, warp_function, objective, img_size, log_scale=False)
+        xs, ys, ts, ps = cut_events_to_lifespan(xs, ys, ts, ps, minv["min_params"], 5, minimum_events=10)
         #minv = grid_search_initial(xs, ys, ts, ps, warp_function, objective, img_size, log_scale=False)
         x0 = minv["min_params"]
         print("x0 at {}".format(x0))
