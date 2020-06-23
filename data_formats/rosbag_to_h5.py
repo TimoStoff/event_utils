@@ -80,6 +80,7 @@ def extract_rosbag(rosbag_path, output_path, event_topic, image_topic=None,
                     image = CvBridge().imgmsg_to_cv2(msg, "bgr8")
                 else:
                     image = CvBridge().imgmsg_to_cv2(msg, "mono8")
+                    print(image)
 
                 ep.package_image(image, timestamp, img_cnt)
                 sensor_size = image.shape
