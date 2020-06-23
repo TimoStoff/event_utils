@@ -1,6 +1,10 @@
 import numpy as np
 import h5py
 
+def infer_resolution(xs, ys):
+    sr = [np.max(ys) + 1, np.max(xs) + 1]
+    return sr
+
 def events_bounds_mask(xs, ys, x_min, x_max, y_min, y_max):
     """
     Get a mask of the events that are within the given bounds
