@@ -113,7 +113,7 @@ def read_h5_events_dict(hdf_path, read_frames=True):
                 images.append(frame)
                 image_stamps.append(f['images/{}'.format(key)].attrs['timestamp'])
                 image_event_indices.append(f['images/{}'.format(key)].attrs['event_idx'])
-            events['frames'] = np.concatenate(images, axis=2) if len(frame.shape)==3 else np.stack(images, axis=2)
+            events['frames'] = np.concatenate(images, axis=2).swapaxes(0,2) if len(frame.shape)==3 else np.stack(images, axis=0)
             events['frame_timestamps'] = np.array(image_stamps)
             events['frame_event_indices'] = np.array(image_event_indices)
         return events
