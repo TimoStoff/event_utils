@@ -7,6 +7,7 @@ import os
 import h5py
 import numpy as np
 from event_packagers import *
+from tqdm import tqdm
 
 
 def append_to_dataset(dataset, data):
@@ -61,7 +62,7 @@ def extract_rosbag(rosbag_path, output_path, event_topic, image_topic=None,
         ep.set_data_available(num_img_msgs, num_flow_msgs)
         num_pos, num_neg, last_ts, img_cnt, flow_cnt = 0, 0, 0, 0, 0
 
-        for topic, msg, t in bag.read_messages():
+        for topic, msg, t in tqdm(bag.read_messages()):
             if first_ts == -1 and topic in topics:
                 timestamp = timestamp_float(msg.header.stamp)
                 first_ts = timestamp
@@ -80,7 +81,6 @@ def extract_rosbag(rosbag_path, output_path, event_topic, image_topic=None,
                     image = CvBridge().imgmsg_to_cv2(msg, "bgr8")
                 else:
                     image = CvBridge().imgmsg_to_cv2(msg, "mono8")
-                    print(image)
 
                 ep.package_image(image, timestamp, img_cnt)
                 sensor_size = image.shape
@@ -116,7 +116,7 @@ def extract_rosbag(rosbag_path, output_path, event_topic, image_topic=None,
                 if (len(xs) > max_buffer_size and timestamp >= start_time) or (end_time is not None and timestamp >= start_time):
                     # print("Writing events")
                     if sensor_size is None or sensor_size[0] < max(ys) or sensor_size[1] < max(xs):
-                        sensor_size = [max(xs), max(ys)]
+                        sensor_size = [max(ys), max(xs)]
                         print("Sensor size inferred from events as {}".format(sensor_size))
                     ep.package_events(xs, ys, ts, ps)
                     del xs[:]
@@ -126,14 +126,16 @@ def extract_rosbag(rosbag_path, output_path, event_topic, image_topic=None,
                 if end_time is not None and timestamp >= start_time:
                     return
                 if sensor_size is None or sensor_size[0] < max(ys) or sensor_size[1] < max(xs):
-                    sensor_size = [max(xs), max(ys)]
+                    sensor_size = [max(ys), max(xs)]
                     print("Sensor size inferred from events as {}".format(sensor_size))
                 ep.package_events(xs, ys, ts, ps)
                 del xs[:]
                 del ys[:]
                 del ts[:]
                 del ps[:]
-        print("Detect sensor size {}".format(sensor_size))
+        if sensor_size is None:
+            raise Exception("ERROR: No sensor size detected, implies no events/images in bag topics?")
+        print("Detected sensor size {}".format(sensor_size))
         ep.add_metadata(num_pos, num_neg, last_ts-t0, t0, last_ts, img_cnt, flow_cnt, sensor_size)
 
 
