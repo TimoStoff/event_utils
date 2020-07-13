@@ -1,13 +1,15 @@
 import argparse
 import numpy as np
+import numpy.lib.recfunctions as nlr
 import cv2 as cv
 import os
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-from data_formats.read_events import read_memmap_events, read_h5_events_dict
-from representations.image import events_to_image
-from util.event_util import clip_events_to_bounds
+from lib.data_formats.read_events import read_memmap_events, read_h5_events_dict
+from lib.representations.image import events_to_image
+from lib.representations.voxel_grid import events_to_voxel
+from lib.util.event_util import clip_events_to_bounds
 from tqdm import tqdm
 
 def parse_crop(cropstr):
@@ -67,10 +69,41 @@ def plot_events_sliding(xs, ys, ts, ps, dt=None, sdt=None, save_dir="/tmp", fram
                 invert=invert, num_compress=num_compress, show_plot=show_plot, img_size=sensor_size,
                 show_axes=show_axes)
 
+def plot_voxel_grid(xs, ys, ts, ps, bins=5, sensor_size=None):
+    if sensor_size is None:
+        sensor_size = [np.max(ys)+1, np.max(xs)+1]
+        print("Inferred sensor size = {}".format(sensor_size))
+    voxels = events_to_voxel(xs, ys, ts, ps, bins, sensor_size=sensor_size)
+    voxels = voxels[:, ::10, ::10]
+
+    pltvoxels = voxels != 0
+    pvp, nvp = voxels > 0, voxels < 0
+    pvox, nvox = voxels*np.where(voxels > 0, 1, 0), voxels*np.where(voxels < 0, 1, 0)
+    pvox, nvox = pvox/np.max(pvox), pvox/np.min(nvox)
+    zeros = np.zeros_like(voxels)
+
+    colors = np.empty(voxels.shape, dtype=object)
+
+    redvals = np.stack((pvox, zeros, zeros), axis=3)
+    redvals = nlr.unstructured_to_structured(redvals).astype('O')
+
+    bluvals = np.abs(np.stack((zeros, zeros, nvox), axis=3))
+    bluvals = nlr.unstructured_to_structured(bluvals).astype('O')
+
+    colors[pvp] = redvals[pvp]
+    colors[nvp] = 'w'#bluvals[nvp]
+
+    fig = plt.figure()
+    ax = fig.gca(projection='3d')
+    ax.voxels(pltvoxels, facecolors=colors, edgecolor='k')
+
+    plt.show()
+    assert False
+
 def plot_events(xs, ys, ts, ps, save_path=None, num_compress='auto', num_show=1000,
         event_size=2, elev=0, azim=45, imgs=[], img_ts=[], show_events=True,
         show_frames=True, show_plot=False, crop=None, compress_front=False,
-        marker='.', stride = 10, invert=False, img_size=None, show_axes=False):
+        marker='.', stride = 1, invert=False, img_size=None, show_axes=False):
     """
     Given events, plot these in a spatiotemporal volume.
     :param: xs x coords of events
@@ -203,10 +236,11 @@ def plot_events_between_frames(xs, ys, ts, ps, frames, frame_event_idx, save_dir
         for f_idx in frame_indices:
             img_ts.append(ts[f_idx[1]])
         fname = os.path.join(save_dir, "events_{:09d}.png".format(i))
-        plot_events(xs[s:e], ys[s:e], ts[s:e], ps[s:e], save_path=fname, num_show=num_show, event_size=event_size,
-                imgs=frame, img_ts=img_ts, show_events=show_events, azim=azim,
-                elev=elev, show_frames=show_frames, crop=crop, compress_front=compress_front,
-                invert=invert, num_compress=num_compress, show_plot=show_plot)
+        plot_voxel_grid(xs[s:e], ys[s:e], ts[s:e], ps[s:e],bins=50)
+        #plot_events(xs[s:e], ys[s:e], ts[s:e], ps[s:e], save_path=fname, num_show=num_show, event_size=event_size,
+        #        imgs=frame, img_ts=img_ts, show_events=show_events, azim=azim,
+        #        elev=elev, show_frames=show_frames, crop=crop, compress_front=compress_front,
+        #        invert=invert, num_compress=num_compress, show_plot=show_plot)
 
 if __name__ == "__main__":
     """
@@ -272,14 +306,14 @@ if __name__ == "__main__":
         ys = frames[0].shape[0]-ys
 
     crop = None if args.crop is None else parse_crop(args.crop)
-    #plot_events_between_frames(xs, ys, ts, ps, frames, frame_idx, args.output_path, num_show=args.num_show, event_size=args.event_size,
-    #        skip_frames=args.skip_frames, show_skipped=not args.hide_skipped, azim=args.azim, elev=args.elev,
-    #        show_events=not args.hide_events, show_frames=not args.hide_frames, crop=crop,
-    #        num_compress=args.num_compress, compress_front=args.compress_front, invert=args.invert, show_plot=args.show_plot)
-    plot_events_sliding(xs, ys, ts, ps, dt=None, sdt=None, frames=frames, frame_ts=frame_ts, save_dir=args.output_path,
-            num_show=args.num_show, event_size=args.event_size,
+    plot_events_between_frames(xs, ys, ts, ps, frames, frame_idx, args.output_path, num_show=args.num_show, event_size=args.event_size,
             skip_frames=args.skip_frames, show_skipped=not args.hide_skipped, azim=args.azim, elev=args.elev,
             show_events=not args.hide_events, show_frames=not args.hide_frames, crop=crop,
-            num_compress=args.num_compress, compress_front=args.compress_front, invert=args.invert,
-            show_plot=args.show_plot, show_axes=args.show_axes)
+            num_compress=args.num_compress, compress_front=args.compress_front, invert=args.invert, show_plot=args.show_plot)
+    #plot_events_sliding(xs, ys, ts, ps, dt=None, sdt=None, frames=frames, frame_ts=frame_ts, save_dir=args.output_path,
+    #        num_show=args.num_show, event_size=args.event_size,
+    #        skip_frames=args.skip_frames, show_skipped=not args.hide_skipped, azim=args.azim, elev=args.elev,
+    #        show_events=not args.hide_events, show_frames=not args.hide_frames, crop=crop,
+    #        num_compress=args.num_compress, compress_front=args.compress_front, invert=args.invert,
+    #        show_plot=args.show_plot, show_axes=args.show_axes)
 
