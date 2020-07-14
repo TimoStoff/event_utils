@@ -79,26 +79,27 @@ def plot_voxel_grid(xs, ys, ts, ps, bins=5, sensor_size=None):
     pltvoxels = voxels != 0
     pvp, nvp = voxels > 0, voxels < 0
     pvox, nvox = voxels*np.where(voxels > 0, 1, 0), voxels*np.where(voxels < 0, 1, 0)
-    pvox, nvox = pvox/np.max(pvox), pvox/np.min(nvox)
+    pvox, nvox = (pvox/np.max(pvox))*0.5+0.5, (np.abs(nvox)/np.max(np.abs(nvox)))*0.5+0.5
     zeros = np.zeros_like(voxels)
 
     colors = np.empty(voxels.shape, dtype=object)
 
-    redvals = np.stack((pvox, zeros, zeros), axis=3)
+    print(np.max(nvox))
+    print(np.min(nvox))
+    redvals = np.stack((pvox, zeros, pvox-0.5), axis=3)
     redvals = nlr.unstructured_to_structured(redvals).astype('O')
 
-    bluvals = np.abs(np.stack((zeros, zeros, nvox), axis=3))
+    bluvals = np.stack((nvox-0.5, zeros, nvox), axis=3)
     bluvals = nlr.unstructured_to_structured(bluvals).astype('O')
 
     colors[pvp] = redvals[pvp]
-    colors[nvp] = 'w'#bluvals[nvp]
+    colors[nvp] = bluvals[nvp]
 
     fig = plt.figure()
     ax = fig.gca(projection='3d')
     ax.voxels(pltvoxels, facecolors=colors, edgecolor='k')
 
     plt.show()
-    assert False
 
 def plot_events(xs, ys, ts, ps, save_path=None, num_compress='auto', num_show=1000,
         event_size=2, elev=0, azim=45, imgs=[], img_ts=[], show_events=True,
@@ -236,7 +237,7 @@ def plot_events_between_frames(xs, ys, ts, ps, frames, frame_event_idx, save_dir
         for f_idx in frame_indices:
             img_ts.append(ts[f_idx[1]])
         fname = os.path.join(save_dir, "events_{:09d}.png".format(i))
-        plot_voxel_grid(xs[s:e], ys[s:e], ts[s:e], ps[s:e],bins=50)
+        plot_voxel_grid(xs[s:e], ys[s:e], ts[s:e], ps[s:e],bins=5)
         #plot_events(xs[s:e], ys[s:e], ts[s:e], ps[s:e], save_path=fname, num_show=num_show, event_size=event_size,
         #        imgs=frame, img_ts=img_ts, show_events=show_events, azim=azim,
         #        elev=elev, show_frames=show_frames, crop=crop, compress_front=compress_front,
