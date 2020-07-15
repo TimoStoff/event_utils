@@ -1,7 +1,6 @@
 import argparse
 import os
 import numpy as np
-from lib.visualization.draw_event_stream import plot_between_frames
 from lib.data_formats.read_events import read_memmap_events, read_h5_events_dict
 
 if __name__ == "__main__":
@@ -47,6 +46,7 @@ if __name__ == "__main__":
             colors for better visibility.')
     parser.add_argument("--crop", type=str, default=None, help="Set a crop of both images and events. Uses 'imagemagick' \
             syntax, eg for a crop of 10x20 starting from point 30,40 use: 10x20+30+40.")
+    parser.add_argument("--renderer", type=str, default="matplotlib", help="Which renderer to use (mayavi is faster)", choices=["matplotlib", "mayavi"])
     args = parser.parse_args()
 
     if os.path.isdir(args.path):
@@ -83,4 +83,9 @@ if __name__ == "__main__":
         frame_idx = np.stack((frame_end, frame_start[0:-1]), axis=1)
         ys = frames[0].shape[0]-ys
 
-    plot_between_frames(xs, ys, ts, ps, frames, frame_idx, args, plttype='events')
+    if args.renderer == "mayavi":
+        from lib.visualization.draw_event_stream_mayavi import plot_between_frames
+        plot_between_frames(xs, ys, ts, ps, frames, frame_idx, args, plttype='events')
+    elif args.renderer == "matplotlib":
+        from lib.visualization.draw_event_stream import plot_between_frames
+        plot_between_frames(xs, ys, ts, ps, frames, frame_idx, args, plttype='events')
