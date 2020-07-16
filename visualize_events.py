@@ -14,14 +14,11 @@ if __name__ == "__main__":
     parser.add_argument('--plot_method', default='between_frames', type=str,
                         help='which method should be used to visualize',
                         choices=['between_frames', 'k_events', 't_seconds'])
-    parser.add_argument('--k', type=int,
-                        help='new plot is formed every k events (required if voxel_method is k_events)')
-    parser.add_argument('--sliding_window_w', type=int,
-                        help='sliding_window size (required if voxel_method is k_events)')
-    parser.add_argument('--t', type=float,
+    parser.add_argument('--w_width', type=float, default=0.01,
                         help='new plot is formed every t seconds (required if voxel_method is t_seconds)')
-    parser.add_argument('--sliding_window_t', type=float,
+    parser.add_argument('--sw_width', type=float,
                         help='sliding_window size in seconds (required if voxel_method is t_seconds)')
+
     parser.add_argument("--num_bins", type=int, default=6, help="How many bins voxels should have.")
 
     parser.add_argument('--show_plot', action='store_true', help='If true, will also display the plot in an interactive window.\
@@ -83,9 +80,22 @@ if __name__ == "__main__":
         frame_idx = np.stack((frame_end, frame_start[0:-1]), axis=1)
         ys = frames[0].shape[0]-ys
 
-    if args.renderer == "mayavi":
-        from lib.visualization.draw_event_stream_mayavi import plot_between_frames
-        plot_between_frames(xs, ys, ts, ps, frames, frame_idx, args, plttype='events')
-    elif args.renderer == "matplotlib":
-        from lib.visualization.draw_event_stream import plot_between_frames
-        plot_between_frames(xs, ys, ts, ps, frames, frame_idx, args, plttype='events')
+    if args.plot_method == 'between_frames':
+        if args.renderer == "mayavi":
+            pass
+            #from lib.visualization.draw_event_stream_mayavi import plot_between_frames
+            #plot_between_frames(xs, ys, ts, ps, frames, frame_idx, args, plttype='events')
+        elif args.renderer == "matplotlib":
+            from lib.visualization.draw_event_stream import plot_between_frames
+            plot_between_frames(xs, ys, ts, ps, frames, frame_idx, args, plttype='events')
+    elif args.plot_method == 'k_events':
+        pass
+    elif args.plot_method == 't_seconds':
+        if args.renderer == "mayavi":
+            pass
+            #from lib.visualization.draw_event_stream_mayavi import plot_between_frames
+            #plot_between_frames(xs, ys, ts, ps, frames, frame_idx, args, plttype='events')
+        elif args.renderer == "matplotlib":
+            print("t seconds")
+            from lib.visualization.draw_event_stream import plot_events_sliding
+            plot_events_sliding(xs, ys, ts, ps, args, frames=frames, frame_ts=frame_ts)
