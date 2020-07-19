@@ -1,11 +1,11 @@
+from mayavi import mlab
 import numpy as np
 import numpy.lib.recfunctions as nlr
 import cv2 as cv
 from skimage.measure import block_reduce
 import os
-from mayavi import mlab
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+#import matplotlib.pyplot as plt
+#from mpl_toolkits.mplot3d import Axes3D
 
 from ..representations.image import events_to_image
 from ..representations.voxel_grid import events_to_voxel
@@ -32,9 +32,7 @@ def combine_plotted(root_dir, elev=0, azim=45):
     if elev == 0 and azim == 45:
         pass
 
-def plot_events_sliding(xs, ys, ts, ps, dt=None, sdt=None, save_dir="/tmp", frames=None, frame_ts=None, num_show=1000, event_size=2,
-        skip_frames=5, show_skipped=True, elev=0, azim=0, show_events=True, show_frames=True, crop=None,
-        compress_front=False, invert=False, num_compress='auto', show_plot=False, show_axes=False):
+def plot_events_sliding(xs, ys, ts, ps, args, dt=None, sdt=None, frames=None, frame_ts=None):
     if dt is None:
         dt = (ts[-1]-ts[0])/10
         sdt = dt/10
@@ -62,12 +60,12 @@ def plot_events_sliding(xs, ys, ts, ps, dt=None, sdt=None, save_dir="/tmp", fram
             wframes = frames[fidx0:fidx1]
             wframe_ts = frame_ts[fidx0:fidx1]
 
-        save_path = os.path.join(save_dir, "frame_{:010d}.png".format(i))
-        plot_events(wxs, wys, wts, wps, save_path=save_path, num_show=num_show, event_size=event_size,
-                imgs=wframes, img_ts=wframe_ts, show_events=show_events, azim=azim,
-                elev=elev, show_frames=show_frames, crop=crop, compress_front=compress_front,
-                invert=invert, num_compress=num_compress, show_plot=show_plot, img_size=sensor_size,
-                show_axes=show_axes)
+        save_path = os.path.join(args.output_path, "frame_{:010d}.png".format(i))
+        plot_events(wxs, wys, wts, wps, save_path=save_path, num_show=args.num_show, event_size=args.event_size,
+                imgs=wframes, img_ts=wframe_ts, show_events=not args.hide_events, azim=args.azim,
+                elev=args.elev, show_frames=not args.hide_frames, crop=args.crop, compress_front=args.compress_front,
+                invert=args.invert, num_compress=args.num_compress, show_plot=args.show_plot, img_size=sensor_size,
+                show_axes=args.show_axes, ts_scale=args.ts_scale)
 
 def plot_voxel_grid(xs, ys, ts, ps, bins=5, frames=[], frame_ts=[],
         sensor_size=None, crop=None, elev=0, azim=45, show_axes=False):
@@ -134,7 +132,8 @@ def plot_voxel_grid(xs, ys, ts, ps, bins=5, frames=[], frame_ts=[],
 def plot_events(xs, ys, ts, ps, save_path=None, num_compress='auto', num_show=1000,
         event_size=2, elev=0, azim=45, imgs=[], img_ts=[], show_events=True,
         show_frames=True, show_plot=False, crop=None, compress_front=False,
-        marker='.', stride = 1, invert=False, img_size=None, show_axes=False):
+        marker='.', stride = 1, invert=False, img_size=None, show_axes=False,
+        ts_scale = 100000):
     """
     Given events, plot these in a spatiotemporal volume.
     :param: xs x coords of events
@@ -157,6 +156,7 @@ def plot_events(xs, ys, ts, ps, save_path=None, num_compress='auto', num_show=10
     :param: crop a list of length 4 that sets the crop of the plot (must
         be in the format [top_left_y, top_left_x, height, width]
     """
+    print("plot all")
     #Crop events
     if img_size is None:
         img_size = [max(ys), max(ps)] if len(imgs)==0 else imgs[0].shape[0:2]
@@ -168,12 +168,12 @@ def plot_events(xs, ys, ts, ps, save_path=None, num_compress='auto', num_show=10
     #Defaults and range checks
     num_show = len(xs) if num_show == -1 else num_show
     skip = max(len(xs)//num_show, 1)
+    print("Has {} events, show only {}, skip = {}".format(len(xs), num_show, skip))
     num_compress = len(xs) if num_compress == -1 else num_compress
     num_compress = min(img_size[0]*img_size[1]*0.5, len(xs)) if num_compress=='auto' else num_compress
     xs, ys, ts, ps = xs[::skip], ys[::skip], ts[::skip], ps[::skip]
 
 
-    ts_scale = 10000
 
     mlab.figure()
 
@@ -194,7 +194,7 @@ def plot_events(xs, ys, ts, ps, save_path=None, num_compress='auto', num_show=10
 
             print("img")
             #img = img.transpose(1,0)
-            mlab.imshow(img, colormap='gray', extent=[0, img.shape[0], 0, img.shape[1], ts[0]*ts_scale, ts[0]*ts_scale])
+            mlab.imshow(img, colormap='gray', extent=[0, img.shape[0], 0, img.shape[1], img_ts*ts_scale, img_ts*ts_scale])
 
            # ax.scatter(xs[0:event_idx], ts[0:event_idx], ys[0:event_idx], zdir='z',
            #         c=colors[0:event_idx], facecolors=colors[0:event_idx],
@@ -232,9 +232,9 @@ def plot_events(xs, ys, ts, ps, save_path=None, num_compress='auto', num_show=10
    # mlab.draw()
 
 
-    colors = [0 if p>0 else 240 for p in ps[::skip]]
-    ones = np.ones(len(xs[::skip]))
-    p3d = mlab.quiver3d(ys[::skip], xs[::skip], ts[::skip]*ts_scale, ones, ones,
+    colors = [0 if p>0 else 240 for p in ps]
+    ones = np.ones(len(xs))
+    p3d = mlab.quiver3d(ys, xs, ts*ts_scale, ones, ones,
             ones, scalars=colors, mode='sphere', scale_factor=event_size)
     p3d.glyph.color_mode = 'color_by_scalar'
 
@@ -269,6 +269,7 @@ def plot_between_frames(xs, ys, ts, ps, frames, frame_event_idx, args, plttype='
             plot_voxel_grid(xs[s:e], ys[s:e], ts[s:e], ps[s:e], bins=args.num_bins, crop=args.crop,
                     frames=frame, frame_ts=img_ts, elev=args.elev, azim=args.azim)
         elif plttype == 'events':
+            print("plot events")
             plot_events(xs[s:e], ys[s:e], ts[s:e], ps[s:e], save_path=fname,
                     num_show=args.num_show, event_size=args.event_size, imgs=frame,
                     img_ts=img_ts, show_events=not args.hide_events, azim=args.azim,

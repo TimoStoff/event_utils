@@ -26,6 +26,7 @@ if __name__ == "__main__":
 
     parser.add_argument("--num_show", type=int, default=-1, help="How many events to show per plot. If -1, show all events.")
     parser.add_argument("--event_size", type=float, default=2, help="Marker size of the plotted events")
+    parser.add_argument("--ts_scale", type=int, default=10000, help="Scales the time axis. Only applicable for mayavi rendering.")
     parser.add_argument("--elev", type=float, default=0, help="Elevation of plot")
     parser.add_argument("--azim", type=float, default=45, help="Azimuth of plot")
     parser.add_argument("--stride", type=int, default=1, help="Downsample stride for plotted images.")
@@ -82,20 +83,18 @@ if __name__ == "__main__":
 
     if args.plot_method == 'between_frames':
         if args.renderer == "mayavi":
-            pass
-            #from lib.visualization.draw_event_stream_mayavi import plot_between_frames
-            #plot_between_frames(xs, ys, ts, ps, frames, frame_idx, args, plttype='events')
+            from lib.visualization.draw_event_stream_mayavi import plot_between_frames
+            plot_between_frames(xs, ys, ts, ps, frames, frame_idx, args, plttype='events')
         elif args.renderer == "matplotlib":
             from lib.visualization.draw_event_stream import plot_between_frames
             plot_between_frames(xs, ys, ts, ps, frames, frame_idx, args, plttype='events')
     elif args.plot_method == 'k_events':
+        print(args.renderer)
         pass
     elif args.plot_method == 't_seconds':
         if args.renderer == "mayavi":
-            pass
-            #from lib.visualization.draw_event_stream_mayavi import plot_between_frames
-            #plot_between_frames(xs, ys, ts, ps, frames, frame_idx, args, plttype='events')
+            from lib.visualization.draw_event_stream_mayavi import plot_events_sliding
+            plot_events_sliding(xs, ys, ts, ps, args, dt=args.w_width, sdt=args.sw_width, frames=frames, frame_ts=frame_ts)
         elif args.renderer == "matplotlib":
-            print("t seconds")
             from lib.visualization.draw_event_stream import plot_events_sliding
             plot_events_sliding(xs, ys, ts, ps, args, frames=frames, frame_ts=frame_ts)
