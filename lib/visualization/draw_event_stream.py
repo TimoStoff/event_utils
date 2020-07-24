@@ -9,27 +9,8 @@ from mpl_toolkits.mplot3d import Axes3D
 from ..representations.image import events_to_image
 from ..representations.voxel_grid import events_to_voxel
 from ..util.event_util import clip_events_to_bounds
+from .visualization_utils import *
 from tqdm import tqdm
-
-def parse_crop(cropstr):
-    split = cropstr.split("x")
-    xsize = int(split[0])
-    split = split[1].split("+")
-    ysize = int(split[0])
-    xoff = int(split[1])
-    yoff = int(split[2])
-    crop = [xoff, yoff, xoff+xsize, yoff+ysize]
-    return crop
-
-def ensure_dir(file_path):
-    directory = os.path.dirname(file_path)
-    if not os.path.exists(directory):
-        print(f"Creating {directory}")
-        os.makedirs(directory)
-
-def combine_plotted(root_dir, elev=0, azim=45):
-    if elev == 0 and azim == 45:
-        pass
 
 def plot_events_sliding(xs, ys, ts, ps, args, frames=[], frame_ts=[]):
     dt, sdt = args.w_width, args.sw_width

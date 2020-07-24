@@ -74,12 +74,13 @@ if __name__ == "__main__":
         ps = events['ps']
         t0 = ts[0]
         ts = ts-t0
-        frames = [np.flip(x/255., axis=0) for x in events['frames']]
+        frames = [np.flip(np.flip(x/255., axis=0), axis=1) for x in events['frames']]
         frame_ts = events['frame_timestamps'][1:]-t0
         frame_end = events['frame_event_indices'][1:]
         frame_start = np.concatenate((np.array([0]), frame_end))
         frame_idx = np.stack((frame_end, frame_start[0:-1]), axis=1)
         ys = frames[0].shape[0]-ys
+        xs = frames[0].shape[1]-xs
 
     if args.plot_method == 'between_frames':
         if args.renderer == "mayavi":

@@ -1,4 +1,5 @@
 from mayavi import mlab
+from mayavi.api import Engine
 import numpy as np
 import numpy.lib.recfunctions as nlr
 import cv2 as cv
@@ -32,7 +33,44 @@ def combine_plotted(root_dir, elev=0, azim=45):
     if elev == 0 and azim == 45:
         pass
 
-def plot_events_sliding(xs, ys, ts, ps, args, dt=None, sdt=None, frames=None, frame_ts=None):
+def plot_events_sliding(xs, ys, ts, ps, args, dt=None, sdt=None, frames=None, frame_ts=None, padding=True):
+
+    skip = max(len(xs)//args.num_show, 1)
+    xs, ys, ts, ps = xs[::skip], ys[::skip], ts[::skip], ps[::skip]
+    t0 = ts[0]
+    sx,sy, st, sp = [], [], [], []
+    if padding:
+        for i in np.arange(ts[0]-dt, ts[0], sdt):
+            sx.append(0)
+            sy.append(0)
+            st.append(i)
+            sp.append(0)
+        print(len(sx))
+        print(st)
+        print(ts)
+        xs = np.concatenate((np.array(sx), xs))
+        ys = np.concatenate((np.array(sy), ys))
+        ts = np.concatenate((np.array(st), ts))
+        ps = np.concatenate((np.array(sp), ps))
+        print(ts)
+
+        ts += -st[0]
+        frame_ts += -st[0]
+        t0 += -st[0]
+        print(ts)
+
+    f = mlab.figure(bgcolor=(1,1,1), size=(1080, 720))
+    engine = mlab.get_engine()
+    scene = engine.scenes[0]
+    scene.scene.camera.position = [373.1207907160101, 5353.96218497846, 7350.065665045519]
+    scene.scene.camera.focal_point = [228.0033999234376, 37.75424682790012, 3421.439332472788]
+    scene.scene.camera.view_angle = 30.0
+    scene.scene.camera.view_up = [0.9997493712140433, -0.02027499237784438, -0.009493125997461629]
+    scene.scene.camera.clipping_range = [2400.251302762254, 11907.415293888362]
+    scene.scene.camera.compute_view_plane_normal()
+
+    print("ts from {} to {}, imgs from {} to {}".format(ts[0], ts[-1], frame_ts[0], frame_ts[-1]))
+    frame_ts = np.array([t0]+list(frame_ts[0:-1]))
     if dt is None:
         dt = (ts[-1]-ts[0])/10
         sdt = dt/10
@@ -60,12 +98,22 @@ def plot_events_sliding(xs, ys, ts, ps, args, dt=None, sdt=None, frames=None, fr
             wframes = frames[fidx0:fidx1]
             wframe_ts = frame_ts[fidx0:fidx1]
 
-        save_path = os.path.join(args.output_path, "frame_{:010d}.png".format(i))
-        plot_events(wxs, wys, wts, wps, save_path=save_path, num_show=args.num_show, event_size=args.event_size,
+        save_path = os.path.join(args.output_path, "frame_{:010d}.jpg".format(i))
+        plot_events(wxs, wys, wts, wps, save_path=save_path, num_show=-1, event_size=args.event_size,
                 imgs=wframes, img_ts=wframe_ts, show_events=not args.hide_events, azim=args.azim,
                 elev=args.elev, show_frames=not args.hide_frames, crop=args.crop, compress_front=args.compress_front,
                 invert=args.invert, num_compress=args.num_compress, show_plot=args.show_plot, img_size=sensor_size,
                 show_axes=args.show_axes, ts_scale=args.ts_scale)
+
+        if save_path is not None:
+            ensure_dir(save_path)
+            #mlab.savefig(save_path, figure=f, magnification=10)
+            #GUI().process_events()
+            #img = mlab.screenshot(figure=f, mode='rgba', antialiased=True)
+            #print(img.shape)
+            mlab.savefig(save_path, figure=f, magnification=8)
+
+        mlab.clf()
 
 def plot_voxel_grid(xs, ys, ts, ps, bins=5, frames=[], frame_ts=[],
         sensor_size=None, crop=None, elev=0, azim=45, show_axes=False):
@@ -173,79 +221,35 @@ def plot_events(xs, ys, ts, ps, save_path=None, num_compress='auto', num_show=10
     num_compress = min(img_size[0]*img_size[1]*0.5, len(xs)) if num_compress=='auto' else num_compress
     xs, ys, ts, ps = xs[::skip], ys[::skip], ts[::skip], ps[::skip]
 
+    t0 = ts[0]
+    ts = ts-t0
 
-
-    mlab.figure()
+    #mlab.options.offscreen = True
 
     #Plot images
     if len(imgs)>0 and show_frames:
-        for imgidx, (img, img_ts) in enumerate(zip(imgs, img_ts)):
+        for imgidx, (img, img_t) in enumerate(zip(imgs, img_ts)):
             img = img[crop[0]:crop[2], crop[1]:crop[3]]
-            #if len(img.shape)==2:
-            #    img = np.stack((img, img, img), axis=2)
-            #if num_compress > 0:
-            #    events_img = events_to_image(xs[0:num_compress], ys[0:num_compress],
-            #            np.ones(num_compress), sensor_size=img.shape[0:2])
-            #    events_img[events_img>0] = 1
-            #    img[:,:,1]+=events_img[:,:]
-            #    img = np.clip(img, 0, 1)
-            #x, y = np.ogrid[0:img.shape[0], 0:img.shape[1]]
-            #event_idx = np.searchsorted(ts, img_ts)
 
-            print("img")
-            #img = img.transpose(1,0)
-            mlab.imshow(img, colormap='gray', extent=[0, img.shape[0], 0, img.shape[1], img_ts*ts_scale, img_ts*ts_scale])
-
-           # ax.scatter(xs[0:event_idx], ts[0:event_idx], ys[0:event_idx], zdir='z',
-           #         c=colors[0:event_idx], facecolors=colors[0:event_idx],
-           #         s=np.ones(xs.shape)*event_size, marker=marker, linewidths=0, alpha=1.0 if show_events else 0)
-
-           # ax.plot_surface(y, img_ts, x, rstride=stride, cstride=stride, facecolors=img, alpha=1 if imgidx == 0 else 0.5)
-
-           # ax.scatter(xs[event_idx:-1], ts[event_idx:-1], ys[event_idx:-1], zdir='z',
-           #         c=colors[event_idx:-1], facecolors=colors[event_idx:-1],
-           #         s=np.ones(xs.shape)*event_size, marker=marker, linewidths=0, alpha=1.0 if show_events else 0)
-
-    #elif num_compress > 0:
-    #    # Plot events
-    #    ax.scatter(xs[::skip], ts[::skip], ys[::skip], zdir='z', c=colors[::skip], facecolors=colors[::skip],
-    #            s=np.ones(xs.shape)*event_size, marker=marker, linewidths=0, alpha=1.0 if show_events else 0)
-    #    num_compress = min(num_compress, len(xs))
-    #    if not compress_front:
-    #        ax.scatter(xs[0:num_compress], np.ones(num_compress)*ts[0], ys[0:num_compress],
-    #                marker=marker, zdir='z', c='w' if invert else 'k', s=np.ones(num_compress)*event_size)
-    #    else:
-    #        ax.scatter(xs[-num_compress-1:-1], np.ones(num_compress)*ts[-1], ys[-num_compress-1:-1],
-    #                marker=marker, zdir='z', c='w' if invert else 'k', s=np.ones(num_compress)*event_size)
-    #else:
-    #    # Plot events
-    #    ax.scatter(xs, ts, ys,zdir='z', c=colors, facecolors=colors, s=np.ones(xs.shape)*event_size, marker=marker, linewidths=0, alpha=1.0 if show_events else 0)
-
-   # colors = [0 if p>0 else 240 for p in ps[::skip]]
-   # N = len(xs[::skip])
-   # ones = np.ones(len(xs[::skip]))
-   # p3d = mlab.quiver3d(ys[::skip], xs[::skip], ts[::skip]*ts_scale, ones, ones,
-   #         ones, scalars=colors, mode='sphere', scale_factor=event_size)
-   # p3d.glyph.color_mode = 'color_by_scalar'
-
-   # p3d.module_manager.scalar_lut_manager.lut.table = colors
-   # mlab.draw()
-
+            mlab.imshow(img, colormap='gray', extent=[0, img.shape[0], 0, img.shape[1], (img_t-t0)*ts_scale, (img_t-t0)*ts_scale+0.01], opacity=1.0, transparent=False)
 
     colors = [0 if p>0 else 240 for p in ps]
-    ones = np.ones(len(xs))
-    p3d = mlab.quiver3d(ys, xs, ts*ts_scale, ones, ones,
-            ones, scalars=colors, mode='sphere', scale_factor=event_size)
+    ones = np.array([0 if p==0 else 1 for p in ps])
+    p3d = mlab.quiver3d(ys, xs, ts*ts_scale, ones, ones, ones, scalars=colors, mode='sphere', scale_factor=event_size)
     p3d.glyph.color_mode = 'color_by_scalar'
-
     p3d.module_manager.scalar_lut_manager.lut.table = colors
-    mlab.draw()
+    #mlab.draw()
+
+    #mlab.view(84.5, 54, 5400, np.array([ 187,  175, 2276]), roll=95)
 
     if show_plot:
         mlab.show()
-    if save_path is not None:
-        ensure_dir(save_path)
-        print("Saving to {}".format(save_path))
+    #if save_path is not None:
+    #    ensure_dir(save_path)
+    #    print("Saving to {}".format(save_path))
+    #    imgmap = mlab.screenshot(mode='rgba', antialiased=True)
+    #    print(imgmap.shape)
+    #    cv.imwrite(save_path, imgmap)
 
 def plot_between_frames(xs, ys, ts, ps, frames, frame_event_idx, args, plttype='voxel'):
     args.crop = None if args.crop is None else parse_crop(args.crop)
