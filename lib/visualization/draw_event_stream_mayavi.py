@@ -11,27 +11,8 @@ import os
 from ..representations.image import events_to_image
 from ..representations.voxel_grid import events_to_voxel
 from ..util.event_util import clip_events_to_bounds
+from ..visualization.visualization_utils import *
 from tqdm import tqdm
-
-def parse_crop(cropstr):
-    split = cropstr.split("x")
-    xsize = int(split[0])
-    split = split[1].split("+")
-    ysize = int(split[0])
-    xoff = int(split[1])
-    yoff = int(split[2])
-    crop = [xoff, yoff, xoff+xsize, yoff+ysize]
-    return crop
-
-def ensure_dir(file_path):
-    directory = os.path.dirname(file_path)
-    if not os.path.exists(directory):
-        print(f"Creating {directory}")
-        os.makedirs(directory)
-
-def combine_plotted(root_dir, elev=0, azim=45):
-    if elev == 0 and azim == 45:
-        pass
 
 def plot_events_sliding(xs, ys, ts, ps, args, dt=None, sdt=None, frames=None, frame_ts=None, padding=True):
 
@@ -121,8 +102,8 @@ def plot_voxel_grid(xs, ys, ts, ps, bins=5, frames=[], frame_ts=[],
         sensor_size = [np.max(ys)+1, np.max(xs)+1] if len(frames)==0 else frames[0].shape
     if crop is not None:
         xs, ys, ts, ps = clip_events_to_bounds(xs, ys, ts, ps, crop)
-        sensor_size = [crop[2]-crop[0], crop[3]-crop[1]]
-        xs, ys = xs-crop[1], ys-crop[0]
+        sensor_size = crop_to_size(crop)
+        xs, ys = xs-crop[2], ys-crop[0]
     num = 10000
     xs, ys, ts, ps = xs[0:num], ys[0:num], ts[0:num], ps[0:num]
     if len(xs) == 0:
@@ -208,10 +189,9 @@ def plot_events(xs, ys, ts, ps, save_path=None, num_compress='auto', num_show=10
     #Crop events
     if img_size is None:
         img_size = [max(ys), max(ps)] if len(imgs)==0 else imgs[0].shape[0:2]
-    crop = [0, 0, img_size[0], img_size[1]] if crop is None else crop
+    crop = [0, img_size[0], 0, img_size[1]] if crop is None else crop
     xs, ys, ts, ps = clip_events_to_bounds(xs, ys, ts, ps, crop, set_zero=False)
-    xs -= crop[1]
-    ys -= crop[0]
+    xs, ys = xs-crop[2], ys-crop[0]
 
     #Defaults and range checks
     num_show = len(xs) if num_show == -1 else num_show
@@ -229,7 +209,7 @@ def plot_events(xs, ys, ts, ps, save_path=None, num_compress='auto', num_show=10
     #Plot images
     if len(imgs)>0 and show_frames:
         for imgidx, (img, img_t) in enumerate(zip(imgs, img_ts)):
-            img = img[crop[0]:crop[2], crop[1]:crop[3]]
+            img = img[crop[0]:crop[1], crop[2]:crop[3]]
 
             mlab.imshow(img, colormap='gray', extent=[0, img.shape[0], 0, img.shape[1], (img_t-t0)*ts_scale, (img_t-t0)*ts_scale+0.01], opacity=1.0, transparent=False)
 

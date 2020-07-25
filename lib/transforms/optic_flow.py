@@ -37,7 +37,7 @@ def warp_events_flow_torch(xt, yt, tt, pt, flow_field, t0=None,
     event_indices[:,:,:,0] = event_indices[:,:,:,0]/(flow_field.shape[-1]-1)*2.0-1.0
     event_indices[:,:,:,1] = event_indices[:,:,:,1]/(flow_field.shape[-2]-1)*2.0-1.0
 
-    flow_at_event = F.grid_sample(flow_field, event_indices, align_corners=True) 
+    flow_at_event = F.grid_sample(flow_field, event_indices, align_corners=True)
     dt = (tt-t0).squeeze()
 
     warped_xt = xt+flow_at_event[:,0,:,:].squeeze()*dt

@@ -71,7 +71,8 @@ if __name__ == "__main__":
     flow_ts = pd.read_csv(os.path.join(args.flow_path, "timestamps.txt"), delimiter=" ", names=["fname", "timestamp"])
     flow_ts = np.array(flow_ts["timestamp"])
 
-    flows = [np.load(fp) for fp in flow_paths]
+    #flows = [-np.flip(np.flip(np.load(fp), axis=1), axis=2) for fp in flow_paths]
+    flows = [-np.load(fp) for fp in flow_paths]
     flow_imgs = [cv.imread(fi) for fi in flow_img_paths]
     print("Loaded {} flow, {} img, {} ts".format(len(flows), len(flow_imgs), len(flow_ts)))
 

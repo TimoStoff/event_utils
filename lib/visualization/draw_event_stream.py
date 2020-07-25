@@ -70,8 +70,8 @@ def plot_voxel_grid(xs, ys, ts, ps, bins=5, frames=[], frame_ts=[],
         sensor_size = [np.max(ys)+1, np.max(xs)+1] if len(frames)==0 else frames[0].shape
     if crop is not None:
         xs, ys, ts, ps = clip_events_to_bounds(xs, ys, ts, ps, crop)
-        sensor_size = [crop[2]-crop[0], crop[3]-crop[1]]
-        xs, ys = xs-crop[1], ys-crop[0]
+        sensor_size = crop_to_size(crop)
+        xs, ys = xs-crop[2], ys-crop[0]
     num = 10000
     xs, ys, ts, ps = xs[0:num], ys[0:num], ts[0:num], ps[0:num]
     if len(xs) == 0:
@@ -155,10 +155,9 @@ def plot_events(xs, ys, ts, ps, save_path=None, num_compress='auto', num_show=10
     #Crop events
     if img_size is None:
         img_size = [max(ys), max(ps)] if len(imgs)==0 else imgs[0].shape[0:2]
-    crop = [0, 0, img_size[0], img_size[1]] if crop is None else crop
+    crop = [0, img_size[0], 0, img_size[1]] if crop is None else crop
     xs, ys, ts, ps = clip_events_to_bounds(xs, ys, ts, ps, crop, set_zero=False)
-    xs -= crop[1]
-    ys -= crop[0]
+    xs, ys = xs-crop[2], ys-crop[0]
 
     #Defaults and range checks
     num_show = len(xs) if num_show == -1 else num_show
@@ -175,7 +174,7 @@ def plot_events(xs, ys, ts, ps, save_path=None, num_compress='auto', num_show=10
     #Plot images
     if len(imgs)>0 and show_frames:
         for imgidx, (img, img_ts) in enumerate(zip(imgs, img_ts)):
-            img = img[crop[0]:crop[2], crop[1]:crop[3]]
+            img = img[crop[0]:crop[1], crop[2]:crop[3]]
             if len(img.shape)==2:
                 img = np.stack((img, img, img), axis=2)
             if num_compress > 0:
