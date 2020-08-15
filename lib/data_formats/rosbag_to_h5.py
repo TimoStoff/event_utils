@@ -58,7 +58,7 @@ def extract_rosbag(rosbag_path, output_path, event_topic, image_topic=None,
         num_event_msgs, num_img_msgs, num_flow_msgs = get_rosbag_stats(bag, event_topic, image_topic, flow_topic)
         # Extract events to h5
         xs, ys, ts, ps = [], [], [], []
-        max_buffer_size = 1000000
+        max_buffer_size = 1e20
         ep.set_data_available(num_img_msgs, num_flow_msgs)
         num_pos, num_neg, last_ts, img_cnt, flow_cnt = 0, 0, 0, 0, 0
 

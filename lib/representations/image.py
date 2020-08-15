@@ -295,3 +295,22 @@ def events_to_timestamp_image_torch(xs, ys, ts, ps,
     img_pos = img_pos.div(img_pos_cnt)
     img_neg = img_neg.div(img_neg_cnt)
     return img_pos, img_neg #/img_pos_cnt, img_neg/img_neg_cnt
+
+class TimestampImage:
+
+    def __init__(self, sensor_size):
+        self.sensor_size = sensor_size
+        self.num_pixels = sensor_size[0]*sensor_size[1]
+        self.image = np.zeros(sensor_size)
+
+    def add_event(self, x, y, t, p):
+        self.image[y, x] = t
+
+    def add_events(self, xs, ys, ts, ps):
+        for x, y, t in zip(xs, ys, ts):
+            self.image[y, x] = t
+
+    def get_image(self):
+        sort_args = np.argsort(self.image)
+        sort_args /= self.num_pixels
+        return sort_args
