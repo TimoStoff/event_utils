@@ -3,7 +3,7 @@ import os
 import numpy as np
 from lib.data_formats.read_events import read_memmap_events, read_h5_events_dict
 from lib.data_loaders import MemMapDataset, DynamicH5Dataset
-from lib.visualization.visualizers import TimeStampImageVisualizer, EventImageVisualizer
+from lib.visualization.visualizers import TimeStampImageVisualizer, EventImageVisualizer, EventsVisualizer
 
 if __name__ == "__main__":
     """
@@ -41,8 +41,9 @@ if __name__ == "__main__":
     parser.add_argument('--hide_events', action='store_true', help='Do not draw events')
     parser.add_argument('--hide_frames', action='store_true', help='Do not draw frames')
     parser.add_argument('--show_axes', action='store_true', help='Draw axes')
-    parser.add_argument("--num_compress", type=int, default=0, help="How many events to draw compressed. If 'auto'\
-            will automatically determine.", choices=['value', 'auto'])
+    parser.add_argument('--flip_x', action='store_true', help='Flip in the x axis')
+    parser.add_argument("--num_compress", type=str, default='auto', help="How many events to draw compressed. If 'auto'\
+            will automatically determine.", choices=['auto', 'none', 'all'])
     parser.add_argument('--compress_front', action='store_true', help='If set, will put the compressed events at the _start_\
             of the event volume, rather than the back.')
     parser.add_argument('--invert', action='store_true', help='If the figure is for a black background, you can invert the \
@@ -59,16 +60,23 @@ if __name__ == "__main__":
     loader_type = MemMapDataset if os.path.isdir(args.path) else DynamicH5Dataset
     dataloader = loader_type(args.path, voxel_method={'method':args.plot_method, 't':args.w_width,
         'k':args.w_width, 'sliding_window_t':args.sw_width, 'sliding_window_w':args.sw_width, 'num_frames':args.num_frames},
-            return_events=True, return_voxelgrid=False, return_frame=True, return_flow=True, event_format='numpy')
+            return_events=True, return_voxelgrid=False, return_frame=True, return_flow=True, return_format='numpy')
     sensor_size = dataloader.size()
 
     if args.visualization == 'events':
-        pass
+        kwargs = {'num_compress':args.num_compress, 'num_show':args.num_show, 'event_size':args.event_size,
+                'elev':args.elev, 'azim':args.azim, 'show_events':not args.hide_events,
+                'show_frames':not args.hide_frames, 'show_plot':args.show_plot, 'crop':args.crop,
+                'compress_front':args.compress_front, 'marker':'.', 'stride':args.stride,
+                'invert':args.invert, 'show_axes':args.show_axes, 'flip_x':args.flip_x}
+        visualizer = EventsVisualizer(sensor_size)
     elif args.visualization == 'voxels':
         pass
     elif args.visualization == 'event_image':
+        kwargs = {}
         visualizer = EventImageVisualizer(sensor_size)
     elif args.visualization == 'ts_image':
+        kwargs = {}
         visualizer = TimeStampImageVisualizer(sensor_size)
     else:
         raise Exception("Unknown visualization chosen: {}".format(args.visualization))
@@ -76,8 +84,8 @@ if __name__ == "__main__":
     for i, data in enumerate(dataloader):
         print("{}/{}: {}".format(i, len(dataloader), data['events'].shape))
         xs, ys, ts, ps = dataloader.unpackage_events(data['events'])
-        print(xs.shape)
-        visualizer.plot_events(xs, ys, ts, ps, "/tmp/img.png")
+        output_path = os.path.join(args.output_path, "frame_{:010d}.jpg".format(i))
+        visualizer.plot_events(data, output_path, **kwargs)
 
     #if args.plot_method == 'between_frames':
     #    if args.renderer == "mayavi":

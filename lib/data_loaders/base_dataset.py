@@ -110,7 +110,7 @@ class BaseVoxelDataset(Dataset):
     def __init__(self, data_path, transforms={}, sensor_resolution=None, num_bins=5,
                  voxel_method={'method': 'between_frames'}, max_length=None, combined_voxel_channels=False,
                  return_events=False, return_voxelgrid=True, return_frame=True, return_prev_frame=False,
-                 return_flow=True, return_prev_flow=False, event_format='torch'):
+                 return_flow=True, return_prev_flow=False, return_format='torch'):
 
         self.num_bins = num_bins
         self.data_path = data_path
@@ -118,7 +118,7 @@ class BaseVoxelDataset(Dataset):
         self.sensor_resolution = sensor_resolution
         self.data_source_idx = -1
         self.has_flow = False
-        self.event_format = event_format
+        self.return_format = return_format
         self.counter = 0
 
         self.return_events = return_events
@@ -210,14 +210,20 @@ class BaseVoxelDataset(Dataset):
                 flow = flow * dt
                 flow = self.transform_flow(flow, seed)
             else:
-                flow = torch.zeros((2, frame.shape[-2], frame.shape[-1]), dtype=frame.dtype, device=frame.device)
+                if self.return_format == 'torch':
+                    flow = torch.zeros((2, frame.shape[-2], frame.shape[-1]), dtype=frame.dtype, device=frame.device)
+                else:
+                    flow = np.zeros((2, frame.shape[-2], frame.shape[-1]))
+
             if self.return_flow:
                 item['flow'] = flow
+                item['flow_ts'] = self.frame_ts[index]
             if self.return_prev_flow:
                 prev_flow = flow if not self.has_flow else self.get_flow(index)
                 item['prev_flow'] = self.transform_flow(prev_flow, seed)
             if self.return_frame:
                 item['frame'] = frame
+                item['frame_ts'] = self.frame_ts[index]
             if self.return_prev_frame:
                 item['prev_frame'] = self.transform_frame(self.get_frame(index), seed)
         else:
@@ -225,19 +231,25 @@ class BaseVoxelDataset(Dataset):
             if self.return_frame:
                 if fi[0] != -1:
                     frames = [self.transform_frame(self.get_frame(fidx), seed) for fidx in range(fi[1]-fi[0])]
+                    frame_ts = self.frame_ts[fi[0]:fi[1]]
                 else:
                     frames = []
-                item['frame'] = flow
+                    frame_ts = []
+                item['frame'] = frames
+                item['frame_ts'] = frame_ts
 
             if self.return_flow:
-                if fi[0] != -1:
-                    flows = [self.transform_flow(self.get_flow(fidx), seed) for fidx in range(fi[1]-fi[0])]
+                if fi[0] != -1 and self.has_flow:
+                    flows = [self.transform_flow(self.get_flow(fidx), seed) for fidx in range(fi[0], fi[1], 1)]
+                    flow_ts = self.frame_ts[fi[0]:fi[1]]
                 else:
                     flows = []
-                item['flow'] = flow
+                    flow_ts = []
+                item['flow'] = flows
+                item['flow_ts'] = flow_ts
 
         if self.return_events:
-            if self.event_format == 'torch':
+            if self.return_format == 'torch':
                 if idx0-idx1 == 0:
                     item['events'] = torch.zeros((1, 4), dtype=torch.float32)
                     item['events_batch_indices'] = torch.ones((1))
@@ -246,7 +258,7 @@ class BaseVoxelDataset(Dataset):
                     item['events'] = torch.from_numpy(np.stack((xs, ys, ts-ts_0, ps), axis=1)).float()
                     item['events_batch_indices'] = idx1-idx0
                     item['ts_idx0'] = torch.tensor(ts_0)
-            elif self.event_format == 'numpy':
+            elif self.return_format == 'numpy':
                 if idx0-idx1 == 0:
                     item['events'] = np.zeros((1, 4))
                     item['events_batch_indices'] = np.ones((1))
@@ -256,7 +268,7 @@ class BaseVoxelDataset(Dataset):
                     item['events_batch_indices'] = idx1-idx0
                     item['ts_idx0'] = np.array(ts_0)
             else:
-                raise Exception("Invalid event format '{}' used".format(self.event_format))
+                raise Exception("Invalid event format '{}' used".format(self.return_format))
         return item
 
     def compute_between_frame_indices(self):
@@ -380,10 +392,11 @@ class BaseVoxelDataset(Dataset):
         """
         Augment frame and turn into tensor
         """
-        frame = torch.from_numpy(frame).float().unsqueeze(0) / 255
-        if self.transform:
-            random.seed(seed)
-            frame = self.transform(frame)
+        if self.return_format == "torch":
+            frame = torch.from_numpy(frame).float().unsqueeze(0) / 255
+            if self.transform:
+                random.seed(seed)
+                frame = self.transform(frame)
         return frame
 
     def transform_voxel(self, voxel, seed):
@@ -399,10 +412,11 @@ class BaseVoxelDataset(Dataset):
         """
         Augment flow and turn into tensor
         """
-        flow = torch.from_numpy(flow)  # should end up [2 x H x W]
-        if self.transform:
-            random.seed(seed)
-            flow = self.transform(flow, is_flow=True)
+        if self.return_format == "torch":
+            flow = torch.from_numpy(flow)  # should end up [2 x H x W]
+            if self.transform:
+                random.seed(seed)
+                flow = self.transform(flow, is_flow=True)
         return flow
 
     def size(self):
