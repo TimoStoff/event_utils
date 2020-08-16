@@ -1,5 +1,9 @@
 import numpy as np
+from scipy.stats import rankdata
 import torch
+
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 
 def events_to_image(xs, ys, ps, sensor_size=(180, 240), interpolation=None, padding=False):
     """
@@ -301,16 +305,37 @@ class TimestampImage:
     def __init__(self, sensor_size):
         self.sensor_size = sensor_size
         self.num_pixels = sensor_size[0]*sensor_size[1]
-        self.image = np.zeros(sensor_size)
+        self.image = np.ones(sensor_size)
 
     def add_event(self, x, y, t, p):
-        self.image[y, x] = t
+        self.image[int(y), int(x)] = t
 
     def add_events(self, xs, ys, ts, ps):
         for x, y, t in zip(xs, ys, ts):
-            self.image[y, x] = t
+            self.add_event(x, y, t, 0)
 
     def get_image(self):
-        sort_args = np.argsort(self.image)
-        sort_args /= self.num_pixels
+        sort_args = rankdata(self.image, method='min')
+        sort_args = sort_args-1
+        sort_args = sort_args.reshape(self.sensor_size)
+        sort_args = sort_args/np.max(sort_args)
         return sort_args
+
+class EventImage:
+
+    def __init__(self, sensor_size):
+        self.sensor_size = sensor_size
+        self.num_pixels = sensor_size[0]*sensor_size[1]
+        self.image = np.ones(sensor_size)
+
+    def add_event(self, x, y, t, p):
+        self.image[int(y), int(x)] += p
+
+    def add_events(self, xs, ys, ts, ps):
+        for x, y, t in zip(xs, ys, ts):
+            self.add_event(x, y, t, 0)
+
+    def get_image(self):
+        mn, mx = np.min(self.image), np.max(self.image)
+        norm_img = (self.image-mn)/(mx-mn)
+        return norm_img

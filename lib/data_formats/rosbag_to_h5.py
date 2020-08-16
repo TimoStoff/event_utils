@@ -114,7 +114,7 @@ def extract_rosbag(rosbag_path, output_path, event_topic, image_topic=None,
                         num_neg += 1
                     last_ts = timestamp
                 if (len(xs) > max_buffer_size and timestamp >= start_time) or (end_time is not None and timestamp >= start_time):
-                    # print("Writing events")
+                    print("Writing events")
                     if sensor_size is None or sensor_size[0] < max(ys) or sensor_size[1] < max(xs):
                         sensor_size = [max(ys), max(xs)]
                         print("Sensor size inferred from events as {}".format(sensor_size))
