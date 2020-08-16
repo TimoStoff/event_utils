@@ -53,6 +53,9 @@ class DynamicH5Dataset(BaseVoxelDataset):
         idx = binary_search_h5_dset(self.h5_file['events/ts'], timestamp)
         return idx
 
+    def ts(self, index):
+        return self.h5_file['events/ts'][index]
+
     def compute_frame_indices(self):
         frame_indices = []
         start_idx = 0

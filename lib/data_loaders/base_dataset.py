@@ -101,6 +101,12 @@ class BaseVoxelDataset(Dataset):
         """
         raise NotImplementedError
 
+    def ts(self, index):
+        """
+        Get timestamp at index
+        """
+        raise NotImplementedError
+
     def __init__(self, data_path, transforms={}, sensor_resolution=None, num_bins=5,
                  voxel_method={'method': 'between_frames'}, max_length=None, combined_voxel_channels=False,
                  return_events=False, return_voxelgrid=True, return_frame=True, return_prev_frame=False,
@@ -214,6 +220,22 @@ class BaseVoxelDataset(Dataset):
                 item['frame'] = frame
             if self.return_prev_frame:
                 item['prev_frame'] = self.transform_frame(self.get_frame(index), seed)
+        else:
+            fi = self.frame_indices[index]
+            if self.return_frame:
+                if fi[0] != -1:
+                    frames = [self.transform_frame(self.get_frame(fidx), seed) for fidx in range(fi[1]-fi[0])]
+                else:
+                    frames = []
+                item['frame'] = flow
+
+            if self.return_flow:
+                if fi[0] != -1:
+                    flows = [self.transform_flow(self.get_flow(fidx), seed) for fidx in range(fi[1]-fi[0])]
+                else:
+                    flows = []
+                item['flow'] = flow
+
         if self.return_events:
             if self.event_format == 'torch':
                 if idx0-idx1 == 0:
@@ -237,7 +259,7 @@ class BaseVoxelDataset(Dataset):
                 raise Exception("Invalid event format '{}' used".format(self.event_format))
         return item
 
-    def compute_frame_indices(self):
+    def compute_between_frame_indices(self):
         """
         For each frame, find the start and end indices of the
         time synchronized events
@@ -278,6 +300,21 @@ class BaseVoxelDataset(Dataset):
             k_indices.append([idx0, idx1])
         return k_indices
 
+    def compute_per_frame_indices(self):
+        """
+        For each set of event_indices, find the enclosed frame indices
+        """
+        frame_indices = []
+        for indices in self.event_indices:
+            s_t, e_t = self.ts(indices[0]), self.ts(indices[1])
+            idx0 = min(np.searchsorted(self.frame_ts, s_t), len(self.frame_ts)-1)
+            idx1 = min(np.searchsorted(self.frame_ts, e_t), len(self.frame_ts)-1)
+            if idx0 == idx1:
+                frame_indices.append([-1, -1])
+            else:
+                frame_indices.append([idx0, idx1])
+        return frame_indices
+
     def set_voxel_method(self, voxel_method):
         """
         Given the desired method of computing voxels,
@@ -297,9 +334,10 @@ class BaseVoxelDataset(Dataset):
             self.event_indices = self.compute_timeblock_indices()
         elif self.voxel_method['method'] == 'between_frames':
             self.length = self.num_frames - 1
-            self.event_indices = self.compute_frame_indices()
+            self.event_indices = self.compute_between_frame_indices()
         else:
             raise Exception("Invalid voxel forming method chosen ({})".format(self.voxel_method))
+        self.frame_indices = self.compute_per_frame_indices()
         if self.length == 0:
             raise Exception("Current voxel generation parameters lead to sequence length of zero")
 

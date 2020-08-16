@@ -82,6 +82,9 @@ class MemMapDataset(BaseVoxelDataset):
         index = np.searchsorted(self.filehandle["t"], timestamp)
         return index
 
+    def ts(self, index):
+        return self.filehandle["t"][index]
+
     def infer_resolution(self):
         if len(self.filehandle["images"]) > 0:
             sr = self.filehandle["images"][0].shape[0:2]
