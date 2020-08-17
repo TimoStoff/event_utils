@@ -1,6 +1,7 @@
 import numpy as np
 import numpy.lib.recfunctions as nlr
 import cv2 as cv
+import colorsys
 from skimage.measure import block_reduce
 import os
 import matplotlib.pyplot as plt
@@ -198,6 +199,17 @@ class VoxelVisualizer(Visualizer):
     def __init__(self, sensor_size):
         self.sensor_size = sensor_size
 
+    @staticmethod
+    def increase_brightness(rgb, increase=0.5):
+        rgb = (rgb*255).astype('uint8')
+        channels = rgb.shape[1]
+        hsv = (np.stack([cv.cvtColor(rgb[:,x,:,:], cv.COLOR_RGB2HSV) for x in range(channels)])).astype(float)
+        hsv[:,:,:,2] = np.clip(hsv[:,:,:,2] + increase*255, 0, 255)
+        hsv = hsv.astype('uint8')
+        rgb_new = np.stack([cv.cvtColor(hsv[x,:,:,:], cv.COLOR_HSV2RGB) for x in range(channels)])
+        rgb_new = (rgb_new.transpose(1,0,2,3)).astype(float)
+        return rgb_new/255.0
+
     def plot_events(self, data, save_path, bins=5, crop=None, elev=0, azim=45, show_axes=False,
             show_plot=False, flip_x=False, size_reduction=10):
 
@@ -231,17 +243,22 @@ class VoxelVisualizer(Visualizer):
         pltvoxels = voxels != 0
         pvp, nvp = voxels > 0, voxels < 0
         rng = 0.2
-        pvox, nvox = voxels*np.where(voxels > 0, 1, 0), voxels*np.where(voxels < 0, 1, 0)
-        pvox, nvox = (pvox/np.max(pvox))*rng+(1-rng), (np.abs(nvox)/np.max(np.abs(nvox)))*rng+(1-rng)
+        min_r, min_b, max_g = 80/255.0, 80/255.0, 0/255.0
+
+        vox_cols = voxels/(max(np.abs(np.max(voxels)), np.abs(np.min(voxels))))
+        pvox, nvox = vox_cols*np.where(vox_cols > 0, 1, 0), np.abs(vox_cols)*np.where(vox_cols < 0, 1, 0)
+        pvox, nvox = pvox*(1-min_r)+min_r, nvox*(1-min_b)+min_b
         zeros = np.zeros_like(voxels)
 
         colors = np.empty(voxels.shape, dtype=object)
 
-        print("min:{}, max:{}".format(np.min(pvox), np.max(pvox)))
-        redvals = np.stack((pvox, zeros, pvox-(1-rng)), axis=3)
+        increase = 0.5
+        redvals = np.stack((pvox, (1.0-pvox)*max_g, pvox-min_r), axis=3)
+        redvals = self.increase_brightness(redvals, increase=increase)
         redvals = nlr.unstructured_to_structured(redvals).astype('O')
 
-        bluvals = np.stack((nvox-(1-rng), zeros, nvox), axis=3)
+        bluvals = np.stack((nvox-min_b, (1.0-nvox)*max_g, nvox), axis=3)
+        bluvals = self.increase_brightness(bluvals, increase=increase)
         bluvals = nlr.unstructured_to_structured(bluvals).astype('O')
 
         colors[pvp] = redvals[pvp]
