@@ -1,5 +1,6 @@
 import argparse
 import os
+from tqdm import tqdm
 import numpy as np
 from lib.data_formats.read_events import read_memmap_events, read_h5_events_dict
 from lib.data_loaders import MemMapDataset, DynamicH5Dataset
@@ -13,6 +14,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("path", help="memmap events path")
     parser.add_argument("--output_path", type=str, default="/tmp/visualization", help="Where to save image outputs")
+    parser.add_argument("--filetype", type=str, default="png", help="Which filetype to save as", choices=["png", "jpg", "pdf"])
 
     parser.add_argument('--plot_method', default='between_frames', type=str,
                         help='which method should be used to visualize',
@@ -84,11 +86,10 @@ if __name__ == "__main__":
     else:
         raise Exception("Unknown visualization chosen: {}".format(args.visualization))
 
-    for i, data in enumerate(dataloader):
-        print("{}/{}: {}".format(i, len(dataloader), data['events'].shape))
+    for i, data in enumerate(tqdm(dataloader)):
+        #print("{}/{}: {}".format(i, len(dataloader), data['events'].shape))
         xs, ys, ts, ps = dataloader.unpackage_events(data['events'])
-        output_path = os.path.join(args.output_path, "frame_{:010d}.jpg".format(i))
-        print(kwargs)
+        output_path = os.path.join(args.output_path, "frame_{:010d}.{}".format(i, args.filetype))
         visualizer.plot_events(data, output_path, **kwargs)
 
     #if args.plot_method == 'between_frames':

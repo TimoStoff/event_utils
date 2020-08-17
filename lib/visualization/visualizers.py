@@ -33,6 +33,7 @@ class TimeStampImageVisualizer(Visualizer):
 
     def plot_events(self, data, save_path, **kwargs):
         xs, ys, ts, ps = self.unpackage_events(data['events'])
+        self.ts_img.set_init(ts[0])
         self.ts_img.add_events(xs, ys, ts, ps)
         timestamp_image = self.ts_img.get_image()
         fig = plt.figure()

@@ -307,6 +307,9 @@ class TimestampImage:
         self.num_pixels = sensor_size[0]*sensor_size[1]
         self.image = np.ones(sensor_size)
 
+    def set_init(self, value):
+        self.image = np.ones_like(self.image)*value
+
     def add_event(self, x, y, t, p):
         self.image[int(y), int(x)] = t
 
@@ -315,7 +318,7 @@ class TimestampImage:
             self.add_event(x, y, t, 0)
 
     def get_image(self):
-        sort_args = rankdata(self.image, method='min')
+        sort_args = rankdata(self.image, method='dense')
         sort_args = sort_args-1
         sort_args = sort_args.reshape(self.sensor_size)
         sort_args = sort_args/np.max(sort_args)
