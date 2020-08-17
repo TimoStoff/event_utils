@@ -3,7 +3,8 @@ import os
 import numpy as np
 from lib.data_formats.read_events import read_memmap_events, read_h5_events_dict
 from lib.data_loaders import MemMapDataset, DynamicH5Dataset
-from lib.visualization.visualizers import TimeStampImageVisualizer, EventImageVisualizer, EventsVisualizer
+from lib.visualization.visualizers import TimeStampImageVisualizer, EventImageVisualizer, \
+        EventsVisualizer, VoxelVisualizer
 
 if __name__ == "__main__":
     """
@@ -71,7 +72,9 @@ if __name__ == "__main__":
                 'invert':args.invert, 'show_axes':args.show_axes, 'flip_x':args.flip_x}
         visualizer = EventsVisualizer(sensor_size)
     elif args.visualization == 'voxels':
-        pass
+        kwargs = {'bins':args.num_bins, 'crop':args.crop, 'elev':args.elev, 'azim':args.azim,
+                'show_axes':args.show_axes, 'show_plot':args.show_plot, 'flip_x':args.flip_x}
+        visualizer = VoxelVisualizer(sensor_size)
     elif args.visualization == 'event_image':
         kwargs = {}
         visualizer = EventImageVisualizer(sensor_size)
@@ -85,6 +88,7 @@ if __name__ == "__main__":
         print("{}/{}: {}".format(i, len(dataloader), data['events'].shape))
         xs, ys, ts, ps = dataloader.unpackage_events(data['events'])
         output_path = os.path.join(args.output_path, "frame_{:010d}.jpg".format(i))
+        print(kwargs)
         visualizer.plot_events(data, output_path, **kwargs)
 
     #if args.plot_method == 'between_frames':

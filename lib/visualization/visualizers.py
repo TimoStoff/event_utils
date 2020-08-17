@@ -36,7 +36,9 @@ class TimeStampImageVisualizer(Visualizer):
         timestamp_image = self.ts_img.get_image()
         fig = plt.figure()
         plt.imshow(timestamp_image, cmap='viridis')
-        plt.show()
+        ensure_dir(save_path)
+        plt.savefig(save_path, transparent=True, dpi=600, bbox_inches = 'tight')
+        #plt.show()
 
 class EventImageVisualizer(Visualizer):
 
@@ -51,7 +53,9 @@ class EventImageVisualizer(Visualizer):
 
         fig = plt.figure()
         plt.imshow(img, cmap='gray')
-        plt.show()
+        ensure_dir(save_path)
+        plt.savefig(save_path, transparent=True, dpi=600, bbox_inches = 'tight')
+        #plt.show()
 
 
 class EventsVisualizer(Visualizer):
@@ -180,7 +184,93 @@ class EventsVisualizer(Visualizer):
     
         #ax.xaxis.set_visible(False)
         #ax.axes.get_yaxis().set_visible(False)
-    
+
+        if show_plot:
+            plt.show()
+        if save_path is not None:
+            ensure_dir(save_path)
+            print("Saving to {}".format(save_path))
+            plt.savefig(save_path, transparent=True, dpi=600, bbox_inches = 'tight')
+        plt.close()
+
+class VoxelVisualizer(Visualizer):
+
+    def __init__(self, sensor_size):
+        self.sensor_size = sensor_size
+
+    def plot_events(self, data, save_path, bins=5, crop=None, elev=0, azim=45, show_axes=False,
+            show_plot=False, flip_x=False, size_reduction=10):
+
+        xs, ys, ts, ps = self.unpackage_events(data['events'])
+        if len(xs) < 2:
+            return
+        ys = self.sensor_size[0]-ys
+        xs = self.sensor_size[1]-xs if flip_x else xs
+
+        frames, frame_ts = data['frame'], data['frame_ts']
+        if not isinstance(frames, list):
+            frames, frame_ts = [frames], [frame_ts]
+
+        if self.sensor_size is None:
+            self.sensor_size = [np.max(ys)+1, np.max(xs)+1] if len(frames)==0 else frames[0].shape
+        if crop is not None:
+            xs, ys, ts, ps = clip_events_to_bounds(xs, ys, ts, ps, crop)
+            self.sensor_size = crop_to_size(crop)
+            xs, ys = xs-crop[2], ys-crop[0]
+        num = 10000
+        xs, ys, ts, ps = xs[0:num], ys[0:num], ts[0:num], ps[0:num]
+        if len(xs) == 0:
+            return
+        voxels = events_to_voxel(xs, ys, ts, ps, bins, sensor_size=self.sensor_size)
+        voxels = block_reduce(voxels, block_size=(1,size_reduction,size_reduction), func=np.mean, cval=0)
+        dimdiff = voxels.shape[1]-voxels.shape[0]
+        filler = np.zeros((dimdiff, *voxels.shape[1:]))
+        voxels = np.concatenate((filler, voxels), axis=0)
+        voxels = voxels.transpose(0,2,1)
+
+        pltvoxels = voxels != 0
+        pvp, nvp = voxels > 0, voxels < 0
+        rng = 0.2
+        pvox, nvox = voxels*np.where(voxels > 0, 1, 0), voxels*np.where(voxels < 0, 1, 0)
+        pvox, nvox = (pvox/np.max(pvox))*rng+(1-rng), (np.abs(nvox)/np.max(np.abs(nvox)))*rng+(1-rng)
+        zeros = np.zeros_like(voxels)
+
+        colors = np.empty(voxels.shape, dtype=object)
+
+        print("min:{}, max:{}".format(np.min(pvox), np.max(pvox)))
+        redvals = np.stack((pvox, zeros, pvox-(1-rng)), axis=3)
+        redvals = nlr.unstructured_to_structured(redvals).astype('O')
+
+        bluvals = np.stack((nvox-(1-rng), zeros, nvox), axis=3)
+        bluvals = nlr.unstructured_to_structured(bluvals).astype('O')
+
+        colors[pvp] = redvals[pvp]
+        colors[nvp] = bluvals[nvp]
+
+        fig = plt.figure()
+        ax = fig.gca(projection='3d')
+        ax.voxels(pltvoxels, facecolors=colors)
+        ax.view_init(elev=elev, azim=azim)
+
+        ax.grid(False)
+        # Hide panes
+        ax.xaxis.pane.fill = False
+        ax.yaxis.pane.fill = False
+        ax.zaxis.pane.fill = False
+        if not show_axes:
+            # Hide spines
+            ax.w_xaxis.line.set_color((1.0, 1.0, 1.0, 0.0))
+            ax.w_yaxis.line.set_color((1.0, 1.0, 1.0, 0.0))
+            ax.w_zaxis.line.set_color((1.0, 1.0, 1.0, 0.0))
+            ax.set_frame_on(False)
+        # Hide xy axes
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_zticks([])
+
+        ax.xaxis.set_visible(False)
+        ax.axes.get_yaxis().set_visible(False)
+
         if show_plot:
             plt.show()
         if save_path is not None:
