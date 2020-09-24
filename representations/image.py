@@ -1,9 +1,16 @@
 import numpy as np
 import torch
 
-def events_to_image(xs, ys, ps, sensor_size=(180, 240), interpolation=None, padding=False):
+def events_to_image(xs, ys, ps, sensor_size=(180, 240), interpolation=None, padding=False, meanval=False):
     """
     Place events into an image using numpy
+    :param xs: x coords of events
+    :param ys: y coords of events
+    :param ps: event polarities/weights
+    :param sensor_size: the size of the event camera sensor
+    :param interpolation: whether to add the events to the pixels by interpolation (values: None, 'bilinear')
+    :param padding: If true, pad the output image to include events otherwise warped off sensor
+    :param meanval: If true, divide the sum of the values by the number of events at that location
     """
     img_size = sensor_size
     if interpolation == 'bilinear' and xs.dtype is not torch.long and xs.dtype is not torch.long:
@@ -11,6 +18,9 @@ def events_to_image(xs, ys, ps, sensor_size=(180, 240), interpolation=None, padd
         xt, yt, pt = xt.float(), yt.float(), pt.float()
         img = events_to_image_torch(xt, yt, pt, clip_out_of_range=True, interpolation='bilinear', padding=padding)
         img = img.numpy()
+        if meanval:
+            event_count_image = events_to_image_torch(xt, yt, torch.ones_like(xt))
+            event_count_image = event_count_image.numpy()
     else:
         coords = np.stack((ys, xs))
         try:
@@ -19,7 +29,12 @@ def events_to_image(xs, ys, ps, sensor_size=(180, 240), interpolation=None, padd
             print("Issue with input arrays! coords={}, coords.shape={}, sum(coords)={}, sensor_size={}".format(coords, coords.shape, np.sum(coords), sensor_size))
             raise ValueError
         img = np.bincount(abs_coords, weights=ps, minlength=sensor_size[0]*sensor_size[1])
-    img = img.reshape(sensor_size)
+        img = img.reshape(sensor_size)
+        if meanval:
+            event_count_image = np.bincount(abs_coords, weights=np.ones_like(xs), minlength=sensor_size[0]*sensor_size[1])
+            event_count_image = event_count_image.reshape(sensor_size)
+    if meanval:
+        img /= (event_count_image+1e-6)
     return img
 
 def events_to_image_torch(xs, ys, ps,
@@ -95,9 +110,29 @@ def interpolate_to_derivative_img(pxs, pys, dxs, dys, d_img, w1, w2):
         d_img[i].index_put_((pys+1, pxs  ), w1[i] * (-dys)       + w2[i] * (1.0-dxs), accumulate=True)
         d_img[i].index_put_((pys+1, pxs+1), w1[i] * dys          + w2[i] *  dxs, accumulate=True)
 
+def image_to_event_weights(xs, ys, img):
+    """
+    Given an image and a set of event coordinates, get the pixel value
+    of the image for each event using bilinear interpolation
+    """
+    clipx, clipy  = img.shape[1]-1, img.shape[0]-1
+    mask = np.where(xs>=clipx, 0, 1)*np.where(ys>=clipy, 0, 1)
+
+    pxs = np.floor(xs*mask).astype(int)
+    pys = np.floor(ys*mask).astype(int)
+    dxs = xs-pxs
+    dys = ys-pys
+    wxs, wys = 1.0-dxs, 1.0-dys
+
+    weights =  img[pys, pxs]      *wxs*wys
+    weights += img[pys, pxs+1]    *dxs*wys
+    weights += img[pys+1, pxs]    *wxs*dys
+    weights += img[pys+1, pxs+1]  *dxs*dys
+    return weights*mask
+
 def events_to_image_drv(xn, yn, pn, jacobian_xn, jacobian_yn,
         device=None, sensor_size=(180, 240), clip_out_of_range=True,
-        interpolation=None, padding=True, compute_gradient=False):
+        interpolation='bilinear', padding=True, compute_gradient=False):
     """
     Method to turn event tensor to image. Allows for bilinear interpolation.
         :param xs: tensor of x coords of events
@@ -152,7 +187,7 @@ def events_to_image_drv(xn, yn, pn, jacobian_xn, jacobian_yn,
 
 def events_to_timestamp_image(xn, yn, ts, pn,
         device=None, sensor_size=(180, 240), clip_out_of_range=True,
-        interpolation='bilinear', padding=True):
+        interpolation='bilinear', padding=True, normalize_timestamps=True):
     """
     Method to generate the average timestamp images from 'Zhu19, Unsupervised Event-based Learning 
     of Optical Flow, Depth, and Egomotion'. This method does not have known derivative.
@@ -174,7 +209,8 @@ def events_to_timestamp_image(xn, yn, ts, pn,
     img_neg: timestamp image of the negative events 
     """
 
-    xt, yt, ts, pt = torch.from_numpy(xn), torch.from_numpy(yn), torch.from_numpy(ts), torch.from_numpy(pn)
+    t0 = ts[0]
+    xt, yt, ts, pt = torch.from_numpy(xn), torch.from_numpy(yn), torch.from_numpy(ts-t0), torch.from_numpy(pn)
     xs, ys, ts, ps = xt.float(), yt.float(), ts.float(), pt.float()
     zero_v = torch.tensor([0.])
     ones_v = torch.tensor([1.])
@@ -193,7 +229,7 @@ def events_to_timestamp_image(xn, yn, ts, pn,
 
     pos_events_mask = torch.where(ps>0, ones_v, zero_v)
     neg_events_mask = torch.where(ps<=0, ones_v, zero_v)
-    normalized_ts = (ts-ts[0])/(ts[-1]+1e-6)
+    normalized_ts = (ts-ts[0])/(ts[-1]+1e-6) if normalize_timestamps else ts
     pxs = xs.floor()
     pys = ys.floor()
     dxs = xs-pxs
@@ -218,7 +254,8 @@ def events_to_timestamp_image(xn, yn, ts, pn,
     img_pos_cnt[img_pos_cnt==0] = 1
     img_neg, img_neg_cnt = img_neg.numpy(), img_neg_cnt.numpy()
     img_neg_cnt[img_neg_cnt==0] = 1
-    return img_pos, img_neg #/img_pos_cnt, img_neg/img_neg_cnt
+    img_pos, img_neg = img_pos/img_pos_cnt, img_neg/img_neg_cnt
+    return img_pos, img_neg
 
 def events_to_timestamp_image_torch(xs, ys, ts, ps,
         device=None, sensor_size=(180, 240), clip_out_of_range=True,

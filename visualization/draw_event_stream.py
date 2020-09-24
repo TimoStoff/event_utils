@@ -4,9 +4,9 @@ import os
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
-from data_formats.read_events import read_memmap_events
-from representations.image import events_to_image
-from util.event_util import clip_events_to_bounds
+from ..data_formats.read_events import read_memmap_events
+from ..representations.image import events_to_image
+from ..util.event_util import clip_events_to_bounds
 
 def ensure_dir(file_path):
     directory = os.path.dirname(file_path)
@@ -18,10 +18,10 @@ def combine_plotted(root_dir, elev=0, azim=45):
     if elev == 0 and azim == 45:
         pass
 
-<<<<<<< HEAD
-def plot_events(xs, ys, ts, ps, save_path=None, num_compress=0, num_show=1000,
+def plot_events(xs, ys, ts, ps, save_path=None, num_compress=0, num_show=-1,
         size=1, elev=0, azim=45, imgs=[], img_ts=[], show_events=True,
-        show_frames=True, show_plot=False, crop=None, compress_front=True, marker='.'):
+        show_frames=True, show_plot=False, crop=None, compress_front=True, marker='.',
+        img_size=None, show_axes=False, full_size=False, stride=5):
     """
     Given events, plot these in a spatiotemporal volume.
     :param: xs x coords of events
@@ -44,10 +44,14 @@ def plot_events(xs, ys, ts, ps, save_path=None, num_compress=0, num_show=1000,
     :param: crop a list of length 4 that sets the crop of the plot (must
         be in the format [top_left_y, top_left_x, height, width]
     """
-    xs, ys, ts, ps = clip_events_to_bounds(xs, ys, ts, ps, crop, set_zero=False)
-    img_size = [max(ys), max(xs)] if len(imgs)==0 else imgs[0].shape[0:2]
-    num_show = len(xs) if num_show == -1 else num_show
+    if crop is not None:
+        xs, ys, ts, ps = clip_events_to_bounds(xs, ys, ts, ps, crop, set_zero=False)
+    if img_size is None:
+        img_size = [max(ys), max(xs)] if len(imgs)==0 else imgs[0].shape[0:2]
+    print(img_size)
+    print(len(xs))
     crop = [0, 0, img_size[0], img_size[1]] if crop is None else crop
+    num_show = len(xs) if num_show == -1 else num_show
 
     skip = max(len(xs)//num_show, 1)
     num_compress = len(xs) if num_compress == -1 else num_compress
@@ -67,7 +71,6 @@ def plot_events(xs, ys, ts, ps, save_path=None, num_compress=0, num_show=1000,
                 img[:,:,1]+=events_img[:,:]
                 img = np.clip(img, 0, 1)
             x, y = np.ogrid[0:img.shape[0], 0:img.shape[1]]
-            stride = 5
             if len(img.shape) == 2:
                 img = np.stack((img, img, img), axis=2)
             ax.plot_surface(y, img_ts, x, rstride=stride, cstride=stride, facecolors=img)
@@ -80,27 +83,29 @@ def plot_events(xs, ys, ts, ps, save_path=None, num_compress=0, num_show=1000,
 
 
     ax.view_init(elev=elev, azim=azim)
-    ax.grid(False)
-    # Hide panes
-    ax.xaxis.pane.fill = False
-    ax.yaxis.pane.fill = False
-    ax.zaxis.pane.fill = False
-    # Hide spines
-    ax.w_xaxis.line.set_color((1.0, 1.0, 1.0, 0.0))
-    ax.w_yaxis.line.set_color((1.0, 1.0, 1.0, 0.0))
-    ax.w_zaxis.line.set_color((1.0, 1.0, 1.0, 0.0))
-    ax.set_frame_on(False)
+    #ax.grid(False)
+    if not show_axes:
+        # Hide panes
+        ax.xaxis.pane.fill = False
+        ax.yaxis.pane.fill = False
+        ax.zaxis.pane.fill = False
+        # Hide spines
+        ax.w_xaxis.line.set_color((1.0, 1.0, 1.0, 0.0))
+        ax.w_yaxis.line.set_color((1.0, 1.0, 1.0, 0.0))
+        ax.w_zaxis.line.set_color((1.0, 1.0, 1.0, 0.0))
+        ax.set_frame_on(False)
+        ax.xaxis.set_visible(False)
+        ax.axes.get_yaxis().set_visible(False)
     # Hide xy axes
     ax.set_xticks([])
     ax.set_yticks([])
     ax.set_zticks([])
-    # Flush axes
-    #ax.set_xlim3d(0, 1000)
-    ax.set_ylim3d(ts[0],ts[-1])
-    #ax.set_zlim3d(0,1000)
+    if full_size:
+        # Flush axes
+        ax.set_xlim3d(0, img_size[1])
+        ax.set_ylim3d(ts[0],ts[-1])
+        ax.set_zlim3d(0, img_size[0])
 
-    ax.xaxis.set_visible(False)
-    ax.axes.get_yaxis().set_visible(False)
 
     if show_plot:
         plt.show()

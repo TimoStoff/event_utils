@@ -4,11 +4,76 @@ import scipy
 import scipy.optimize as opt
 from scipy.ndimage.filters import gaussian_filter
 import torch
+import copy
 from ..util.event_util import infer_resolution
-from ..util.util import plot_image, save_image
+from ..util.util import plot_image, save_image, plot_image_grid
+from ..visualization.draw_event_stream import plot_events
 from .objectives import *
 from .warps import *
+from ..representations.image import events_to_timestamp_image
+import matplotlib.pyplot as plt
 
+def get_hsv_shifted():
+    from matplotlib import cm
+    from matplotlib.colors import LinearSegmentedColormap
+
+    hsv = cm.get_cmap('hsv')
+    hsv_shifted = []
+    for i in np.arange(0, 0.6666, 0.01):
+        hsv_shifted.append(hsv(np.fmod(i+0.6666, 1.0)))
+    hsv_shifted = LinearSegmentedColormap.from_list('hsv_shifted', hsv_shifted, N=100)
+    return hsv_shifted
+
+def find_event_change(w_ori, w_dx, w_dy, mean, orig, dx, dy):
+    print("Mean ts = {}".format(mean))
+    weight_ori = image_to_event_weights(w_ori[0], w_ori[1], orig)
+    weight_dx = image_to_event_weights(w_dx[0], w_dx[1], dx)
+    weight_dy = image_to_event_weights(w_dy[0], w_dy[1], dy)
+
+    d_ori_mean = np.abs(weight_ori-mean)
+    d_d_mean = np.abs(weight_dx-mean)
+    print(weight_ori)
+    print(mean)
+    print(d_ori_mean)
+
+    xs, ys = w_ori[0], w_ori[1]
+    img1 = events_to_image(xs, ys, d_ori_mean, interpolation='bilinear', meanval=True)
+
+    xs, ys = w_dx[0], w_dx[1]
+    img2 = events_to_image(xs, ys, d_d_mean, interpolation='bilinear', meanval=True)
+
+    hsv_shifted = get_hsv_shifted()
+    plot_image(img1, cmap=hsv_shifted, colorbar=True)
+    plot_image(img2, cmap=hsv_shifted, colorbar=True)
+
+    xs, ys = w_ori[0], w_ori[1]
+    diff = -(d_ori_mean-d_d_mean)
+    diff_img = events_to_image(xs, ys, diff, interpolation='bilinear')
+    plot_image(diff_img, cmap=hsv_shifted, colorbar=True)
+
+    pos = np.where(diff>0.1, 1, 0)
+    diff_img = events_to_image(xs, ys, pos, interpolation='bilinear')
+    plot_image(diff_img, cmap=hsv_shifted, colorbar=True)
+
+
+def seg_ts_image(xs, ys, ts, ps, sensor_size):
+    #Get the timestamp image
+    ts_img = events_to_timestamp_image(xs, ys, ts, ps, sensor_size=sensor_size, normalize_timestamps=False)
+    ts_img = (ts_img[0]+ts_img[1]).astype('float64')
+    #ts_img += ts[0]
+
+    #avg_ts = np.mean(ts)
+    #ts_rng = ts[-1]-ts[0]
+    #thresh = ts_rng*0.01
+    #print("rng={}, thresh={}".format(ts_rng, thresh))
+    #mask = np.where(np.abs(ts_img-avg_ts) < thresh, 1, 0)
+    #masked = ts_img*mask
+    #plot_image(masked, lognorm=False, cmap='viridis')
+    #print("img max={} img min={}, img mean={}".format(np.max(ts_img), np.min(ts_img), np.mean(ts_img)))
+    #print("img max={} img min={}, img mean={}".format(np.max(ts), np.min(ts), np.mean(ts)))
+    return ts_img
+
+cnt = 0
 def grid_cmax(xs, ys, ts, ps, roi_size=(20,20), step=None, warp=linvel_warp(),
         obj=variance_objective(adaptive_lifespan=True, minimum_events=105)):
     step = roi_size if step is None else step
@@ -19,10 +84,11 @@ def grid_cmax(xs, ys, ts, ps, roi_size=(20,20), step=None, warp=linvel_warp(),
     results_rois = []
     results_f_evals = []
     samplenum = 0
-    for xc in range(0, resolution[1], step[1]):
+    print("Running grid search...")
+    for xc in range(80, resolution[1], step[1]):
         x_roi_idc = np.argwhere((xs>=xc) & (xs<xc+step[1]))[:, 0]
         y_subset = ys[x_roi_idc]
-        for yc in range(0, resolution[0], step[0]):
+        for yc in range(20, resolution[0], step[0]):
             bbox = [(xc, yc), (xc+step[1], yc+step[0])]
             y_roi_idc = np.argwhere((y_subset>=yc) & (y_subset<yc+step[0]))[:, 0]
 
@@ -33,14 +99,81 @@ def grid_cmax(xs, ys, ts, ps, roi_size=(20,20), step=None, warp=linvel_warp(),
 
             if len(roi_xs) > 0:
                 #params = optimize(roi_xs, roi_ys, roi_ts, roi_ps, warp, obj, numeric_grads=False)
+                obj = variance_objective(adaptive_lifespan=True, minimum_events=105)
+                print("OPTIMIZE using {} events".format(len(roi_xs)))
                 params = optimize_contrast(roi_xs, roi_ys, roi_ts, roi_ps, warp, obj, numeric_grads=False, blur_sigma=2.0, img_size=resolution, grid_search_init=True)
+                print("--- first cycle ---")
                 params = optimize_contrast(roi_xs, roi_ys, roi_ts, roi_ps, warp, obj, numeric_grads=False, blur_sigma=1.0, img_size=resolution, x0=params)
                 print("Final optimization param: {}".format(params))
-                #xsc, ysc, tsc, psc = cut_events_to_lifespan(xs, ys, ts, ps, params, 10)
+                print("===============")
+                #xsc, ysc, tsc, psc = cut_events_to_lifespan(xs, ys, ts, ps, params, 10, minimum_events=10)
                 xsc, ysc, tsc, psc = xs, ys, ts, ps
-                iwe, d_iwe = get_iwe(params, xsc, ysc, tsc, psc, warp, resolution,
-                       use_polarity=True, compute_gradient=False)
-                plot_image(iwe, bbox=[[xc,yc],[xc+step[1],yc+step[0]]])
+
+                #print the iwe and the diwe
+                iwe, d_iwe, (xw, ywe) = get_iwe(params, xsc, ysc, tsc, psc, warp, resolution,
+                       use_polarity=True, compute_gradient=True, return_events=True)
+                plot_image(iwe, bbox=[[xc,yc],[xc+step[1],yc+step[0]]], savename="/tmp/iwe_{}.jpg".format(0))
+                plot_image_grid([d_iwe[0], d_iwe[1]], norm=False, savename="/tmp/diwe_{}.jpg".format(0))
+
+                #Try mitrokhin timestamp thing
+                hsv_shifted = get_hsv_shifted()
+                xw1, yw1, jx, jy = warp.warp(xsc, ysc, tsc, psc, tsc[-1], params, compute_grad=False)
+                simg1=seg_ts_image(xw1, yw1, tsc, psc, resolution)
+
+                delta = 50
+                xw2, yw2, jx, jy = warp.warp(xsc, ysc, tsc, psc, tsc[-1], [params[0]+delta, params[1]], compute_grad=False)
+                simg2=seg_ts_image(xw2, yw2, tsc, psc, resolution)
+
+                xw3, yw3, jx, jy = warp.warp(xsc, ysc, tsc, psc, tsc[-1], [params[0], params[1]+delta], compute_grad=False)
+                simg3=seg_ts_image(xw3, yw3, tsc, psc, resolution)
+
+                plot_image_grid([simg1, simg2, simg3], lognorm=False, cmap=hsv_shifted, norm=True, colorbar=True)
+
+                normalized_ts = tsc-tsc[0]
+                mean_ts = np.mean(normalized_ts)
+                find_event_change([xw1, yw1], [xw2, yw2], [xw3, yw3], mean_ts, simg1, simg2, simg3)
+                return
+
+                for i in range(1, 100, 10):
+                    img1, d_iwe, (wx,wy), ew1 = get_iwe(params, xsc, ysc, tsc, psc, warp, resolution,
+                           use_polarity=True, return_per_event_contrast=True, return_events=True)
+                    img1 = events_to_image(wx, wy, psc, interpolation='bilinear', padding=True)
+                    plot_image(img1, savename="/tmp/img1_{}.jpg".format(i))
+                    ew1 = image_to_event_weights(wx, wy, img1)
+                    params2 = params + np.array([i, i])
+                    print(params2)
+                    img2, d_iwe, ew2 = get_iwe(params2, xsc, ysc, tsc, psc, warp, resolution,
+                           use_polarity=True, return_per_event_contrast=True)
+                    img3 = img1-img2
+                    dew = ew1-ew2
+
+                    dew_iwe, d_iwe = get_iwe(params2, xsc, ysc, tsc, dew, warp, resolution,
+                           use_polarity=True)
+                    re_iwe = events_to_image(wx, wy, ew1, interpolation='bilinear')
+                    plot_image(re_iwe, savename="/tmp/re_iwe_{}.jpg".format(i))
+
+                    plot_image_grid([img1, img2, img3], norm=False, savename="/tmp/img_comp{}.jpg".format(i))
+                    save_image(img3, fname="/tmp/img_{}.jpg".format(i))
+                    save_image(dew_iwe, fname="/tmp/dew_{}.jpg".format(i))
+
+
+
+                #seg_mask = gaussian_filter(segmentation_mask_from_d_iwe(d_iwe), 1.0)
+                seg_mask = segmentation_mask_from_d_iwe(d_iwe).astype(np.float)
+                plot_image(seg_mask)
+                seg_mask = gaussian_filter(seg_mask, sigma=1)
+
+                event_ind = get_events_from_mask(seg_mask, xw, yw)
+                print(event_ind.shape)
+                segx = xsc[event_ind[0:10000]]
+                segy = ysc[event_ind[0:10000]]
+                segt = tsc[event_ind[0:10000]]
+                segp = psc[event_ind[0:10000]]
+                img = [np.ones((180,240), dtype=np.float)]
+                img_ts = [segt[0]]
+                plot_events(240-segx, 180-segy, segt, segp, show_plot=True, num_show=-1, img_size=(180,240), num_compress=1000)
+                print(len(segx))
+
                 #save_image(iwe, fname="/tmp/vis/img_{:09d}.png".format(samplenum), bbox=[[xc,yc],[xc+step[1],yc+step[0]]])
                 samplenum += 1
                 results_params.append(params)
@@ -48,8 +181,28 @@ def grid_cmax(xs, ys, ts, ps, roi_size=(20,20), step=None, warp=linvel_warp(),
                 results_f_evals.append(obj.evaluate_function(iwe=iwe))
     return results_params, results_f_evals, results_rois
 
+def segmentation_mask_from_d_iwe(d_iwe, th=None):
+    th1 = np.percentile(np.abs(d_iwe), 90)
+    validx = d_iwe[0].flatten()[np.argwhere(np.abs(d_iwe[0].flatten()) > th1).squeeze()]
+    validy = d_iwe[1].flatten()[np.argwhere(np.abs(d_iwe[1].flatten()) > th1).squeeze()]
+    x_c = np.percentile(validx, 95)
+    y_c = np.percentile(validy, 95)
+
+    thx = x_c if th is None else th
+    thy = y_c if th is None else th
+
+    imgxp = np.where(d_iwe[0] > thx, 1, 0)
+    imgyp = np.where(d_iwe[1] > thy, 1, 0)
+    imgxn = np.where(d_iwe[0] < -thx, 1, 0)
+    imgyn = np.where(d_iwe[1] < -thy, 1, 0)
+    imgx = imgxp + imgxn
+    imgy = imgyp + imgyn
+    img = np.clip(np.add(imgx, imgy), 0, 1)
+    return img
+
 def draw_objective_function(xs, ys, ts, ps, objective, warpfunc, x_range=(-200, 200), y_range=(-200, 200),
-        gt=(0,0), show_gt=True, resolution=20, img_size=(180, 240)):
+        gt=(0,0), show_gt=True, resolution=20, img_size=(180, 240), show_axes=True, norm_min=None, norm_max=None,
+        show=True):
     """
     Draw the objective function given by sampling over a range. Depending on the value of resolution, this
     can involve many samples and take some time.
@@ -72,16 +225,36 @@ def draw_objective_function(xs, ys, ts, ps, objective, warpfunc, x_range=(-200, 
        for y in range(img.shape[0]):
            params = np.array([x*resolution+x_range[0], y*resolution+y_range[0]])
            img[y,x] = -objective.evaluate_function(params, xs, ys, ts, ps, warpfunc, img_size, blur_sigma=0)
-    img = cv.normalize(img, None, 0, 1.0, cv.NORM_MINMAX)
+    norm_min = np.min(img) if norm_min is None else norm_min
+    norm_max = np.max(img) if norm_max is None else norm_max
+    img = (img-norm_min)/((norm_max-norm_min)+1e-6)
+    #img = cv.normalize(img, None, 0, 1.0, cv.NORM_MINMAX)
     plt.imshow(img, interpolation='bilinear', cmap='viridis')
-    plt.xticks([])
-    plt.yticks([])
+    if not show_axes:
+        plt.xticks([])
+        plt.yticks([])
+    else:
+        xt = plt.xticks()[0][1:-1]
+        xticklabs = np.linspace(x_range[0], x_range[1], len(xt))
+        xticklabs = ["{}".format(int(x)) for x in xticklabs]
+
+        yt = plt.yticks()[0][1:-1]
+        yticklabs = np.linspace(y_range[0], y_range[1], len(yt))
+        yticklabs = ["{}".format(int(y)) for y in yticklabs]
+
+        plt.xticks(ticks=xt, labels=xticklabs)
+        plt.yticks(ticks=yt, labels=yticklabs)
+
+        plt.xlabel("$v_x$")
+        plt.ylabel("$v_y$")
+
     if show_gt:
         xloc = ((gt[0]-x_range[0])/(width))*imshape[1]
         yloc = ((gt[1]-y_range[0])/(height))*imshape[0]
         plt.axhline(y=yloc, color='r', linestyle='--')
         plt.axvline(x=xloc, color='r', linestyle='--')
-    plt.show()
+    if show:
+        plt.show()
 
 def find_new_range(search_axes, param):
     """
@@ -104,7 +277,7 @@ def find_new_range(search_axes, param):
     return param_range
 
 def recursive_search(xs, ys, ts, ps, warp_function, objective_function, img_size, param_ranges=None,
-        log_scale=True, num_samples_per_param=5, depth=0, th0=10, max_iters=4):
+        log_scale=True, num_samples_per_param=5, depth=0, th0=1, max_iters=20):
     """
     Recursive grid-search optimization as per SOFAS. Searches a grid over a range
     and then searches a sub-grid, etc, until convergence.
@@ -131,7 +304,7 @@ def recursive_search(xs, ys, ts, ps, warp_function, objective_function, img_size
     :param: max_iters maximum number of iterations
     """
     assert num_samples_per_param%2==1 and num_samples_per_param>=5
-    optimal = grid_search_initial(xs, ys, ts, ps, warp_function, objective_function,
+    optimal = grid_search_initial(xs, ys, ts, ps, warp_function, copy.deepcopy(objective_function),
             img_size, param_ranges=param_ranges, log_scale=log_scale,
             num_samples_per_param=num_samples_per_param)
 
@@ -142,13 +315,13 @@ def recursive_search(xs, ys, ts, ps, warp_function, objective_function, img_size
         new_range = find_new_range(sa, param)
         new_param_ranges.append(new_range)
         max_range = np.abs(new_range[1]-new_range[0]) if np.abs(new_range[1]-new_range[0]) > max_range else max_range
-    print("--- Depth={}, range={} ---".format(depth, max_range))
+    #print("--- Depth={}, range={} ---".format(depth, max_range))
     if max_range >= th0 and depth < max_iters:
         return recursive_search(xs,ys,ts,ps,warp_function,objective_function,img_size,
                 param_ranges=new_param_ranges, log_scale=log_scale,
                 num_samples_per_param=num_samples_per_param, depth=depth+1)
     else:
-        print("SOFAS search: {}".format(optimal["min_params"]))
+        #print("SOFAS search: {}".format(optimal["min_params"]))
         return optimal
 
 
@@ -186,7 +359,11 @@ def grid_search_initial(xs, ys, ts, ps, warp_function, objective_function, img_s
     if param_ranges is None:
         param_ranges = []
         for i in range(warp_function.dims):
-            param_ranges.append([-100, 100])
+            param_ranges.append([-150, 150])
+
+    #draw_objective_function(xs, ys, ts, ps, variance_objective(), linvel_warp(), x_range=param_ranges[0], y_range=param_ranges[1], show_gt=False, resolution=2)
+    #old_xlim = plt.xlim()
+    #old_ylim = plt.ylim()
 
     axes = []
     for param_range in param_ranges:
@@ -202,22 +379,34 @@ def grid_search_initial(xs, ys, ts, ps, warp_function, objective_function, img_s
     output = {"params":[], "eval": [], "search_axes": axes}
     best_eval = 0
     best_params = None
+
+    #xpts, ypts = [], []
     for params in zip(*coords):
         f_eval = objective_function.evaluate_function(params=params, xs=xs, ys=ys, ts=ts, ps=ps,
                 warpfunc=warp_function, img_size=img_size, blur_sigma=1.0)
+        #xpts.append(params[0])
+        #ypts.append(params[1])
         #print("{}: {}".format(params, f_eval))
         output["params"].append(params)
         output["eval"].append(f_eval)
         if f_eval < best_eval:
             best_eval = f_eval
             best_params = params
+
+    #xpts = (xpts-min(xpts))/(max(xpts)-min(xpts))*(old_xlim[1]-old_xlim[0])+old_xlim[0]
+    #ypts = (ypts-min(ypts))/(max(ypts)-min(ypts))*(old_ylim[0]-old_ylim[1])+old_ylim[1]
+    #plt.xlim(old_xlim)
+    #plt.ylim(old_ylim)
+    #plt.scatter(xpts, ypts, c='r', marker='x')
+    #plt.show()
+
     output["min_params"] = best_params
     output["min_func_eval"] = best_eval
     #print("min @ {}: {}".format(best_params, best_eval))
     return output
 
 def optimize_contrast(xs, ys, ts, ps, warp_function, objective, optimizer=opt.fmin_bfgs, x0=None,
-        numeric_grads=False, blur_sigma=None, img_size=(180, 240), grid_search_init=False):
+        numeric_grads=False, blur_sigma=None, img_size=(180, 240), grid_search_init=False, minimum_events=200):
     """
     Optimize contrast for a set of events
     Parameters:
@@ -241,18 +430,21 @@ def optimize_contrast(xs, ys, ts, ps, warp_function, objective, optimizer=opt.fm
     """
     if grid_search_init and x0 is None:
         print("-----------")
-        minv = recursive_search(xs, ys, ts, ps, warp_function, objective, img_size, log_scale=False)
-        xs, ys, ts, ps = cut_events_to_lifespan(xs, ys, ts, ps, minv["min_params"], 5, minimum_events=10)
+        init_obj = copy.deepcopy(objective)
+        init_obj.adaptive_lifespan = False
+        minv = recursive_search(xs, ys, ts, ps, warp_function, init_obj, img_size, log_scale=False)
+        #xs, ys, ts, ps = cut_events_to_lifespan(xs, ys, ts, ps, minv["min_params"], 5, minimum_events=minimum_events)
         #minv = grid_search_initial(xs, ys, ts, ps, warp_function, objective, img_size, log_scale=False)
         x0 = minv["min_params"]
-        print("x0 at {}".format(x0))
     elif x0 is None:
         x0 = np.array([0,0])
+    print("Using {} events, x0 = {}".format(len(xs), x0))
+    objective.iter_update(x0)
     args = (xs, ys, ts, ps, warp_function, img_size, blur_sigma)
     if numeric_grads:
-        argmax = optimizer(objective.evaluate_function, x0, args=args, epsilon=1, disp=False)
+        argmax = optimizer(objective.evaluate_function, x0, args=args, epsilon=1, disp=False, callback=objective.iter_update)
     else:
-        argmax = optimizer(objective.evaluate_function, x0, fprime=objective.evaluate_gradient, args=args, disp=False)
+        argmax = optimizer(objective.evaluate_function, x0, fprime=objective.evaluate_gradient, args=args, disp=True, callback=objective.iter_update)
     return argmax
 
 def optimize(xs, ys, ts, ps, warp, obj, numeric_grads=True, img_size=(180, 240)):

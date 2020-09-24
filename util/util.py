@@ -88,21 +88,28 @@ def format_power(size):
         n += 1
     return size, power_labels[n]
 
-def plot_image(image, lognorm=False, cmap='gray', bbox=None):
+def plot_image(image, lognorm=False, cmap='gray', bbox=None, ticks=False, norm=True, savename=None, colorbar=False):
     fig, ax = plt.subplots(1)
     if lognorm:
         image = np.log10(image)
         cmap='viridis'
-    image = cv.normalize(image, None, 0, 1.0, cv.NORM_MINMAX)
-    ax.imshow(image, cmap=cmap)
+    if norm:
+        image = cv.normalize(image, None, 0, 1.0, cv.NORM_MINMAX)
+    ims = ax.imshow(image, cmap=cmap)
     if bbox is not None:
         w = bbox[1][0]-bbox[0][0]
         h = bbox[1][1]-bbox[0][1]
         rect = patches.Rectangle((bbox[0]), w, h, linewidth=1, edgecolor='r', facecolor='none')
         ax.add_patch(rect)
+    if colorbar:
+        fig.colorbar(ims)
+    if not ticks:
+        plt.axis('off')
+    if savename is not None:
+        plt.savefig(savename)
     plt.show()
 
-def plot_image_grid(images, grid_shape=None, lognorm=False, cmap='gray', bbox=None):
+def plot_image_grid(images, grid_shape=None, lognorm=False, cmap='gray', bbox=None, norm=True, savename=None, colorbar=False):
     if grid_shape is None:
         grid_shape = [1, len(images)]
 
@@ -115,26 +122,32 @@ def plot_image_grid(images, grid_shape=None, lognorm=False, cmap='gray', bbox=No
             if lognorm:
                 image = np.log10(image)
                 cmap='viridis'
-            image = cv.normalize(image, None, 0, 1.0, cv.NORM_MINMAX)
+            if norm:
+                image = cv.normalize(image, None, 0, 1.0, cv.NORM_MINMAX)
             row.append(image)
             img_idx += 1
         col.append(np.concatenate(row, axis=1))
     comp_img = np.concatenate(col, axis=0)
-    plot_image(comp_img)
+    if savename is None:
+        plot_image(comp_img, norm=False, colorbar=colorbar, cmap=cmap)
+    else:
+        save_image(comp_img, fname=savename, colorbar=colorbar, cmap=cmap)
 
-def save_image(image, fname=None, lognorm=False, cmap='gray', bbox=None):
+def save_image(image, fname=None, lognorm=False, cmap='gray', bbox=None, colorbar=False):
     fname = "/tmp/img.png" if fname is None else fname
     fig, ax = plt.subplots(1)
     if lognorm:
         image = np.log10(image)
         cmap='viridis'
     image = cv.normalize(image, None, 0, 1.0, cv.NORM_MINMAX)
-    ax.imshow(image, cmap=cmap)
+    ims = ax.imshow(image, cmap=cmap)
     if bbox is not None:
         w = bbox[1][0]-bbox[0][0]
         h = bbox[1][1]-bbox[0][1]
         rect = patches.Rectangle((bbox[0]), w, h, linewidth=1, edgecolor='r', facecolor='none')
         ax.add_patch(rect)
+    if colorbar:
+        fig.colorbar(ims)
     plt.savefig(fname, dpi=150)
     plt.close()
 
