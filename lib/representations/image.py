@@ -1,7 +1,8 @@
 import numpy as np
+from scipy.stats import rankdata
 import torch
 
-def events_to_image(xs, ys, ps, sensor_size=(180, 240), interpolation=None, padding=False, meanval=False):
+def events_to_image(xs, ys, ps, sensor_size=(180, 240), interpolation=None, padding=False):
     """
     Place events into an image using numpy
     :param xs: x coords of events
@@ -26,7 +27,9 @@ def events_to_image(xs, ys, ps, sensor_size=(180, 240), interpolation=None, padd
         try:
             abs_coords = np.ravel_multi_index(coords, sensor_size)
         except ValueError:
-            print("Issue with input arrays! coords={}, coords.shape={}, sum(coords)={}, sensor_size={}".format(coords, coords.shape, np.sum(coords), sensor_size))
+            print("Issue with input arrays! minx={}, maxx={}, miny={}, maxy={}, coords.shape={}, \
+                    sum(coords)={}, sensor_size={}".format(np.min(xs), np.max(xs), np.min(ys), np.max(ys),
+                        coords.shape, np.sum(coords), sensor_size))
             raise ValueError
         img = np.bincount(abs_coords, weights=ps, minlength=sensor_size[0]*sensor_size[1])
         img = img.reshape(sensor_size)
@@ -330,3 +333,46 @@ def events_to_timestamp_image_torch(xs, ys, ts, ps,
     img_pos = img_pos.div(img_pos_cnt)
     img_neg = img_neg.div(img_neg_cnt)
     return img_pos, img_neg #/img_pos_cnt, img_neg/img_neg_cnt
+
+class TimestampImage:
+
+    def __init__(self, sensor_size):
+        self.sensor_size = sensor_size
+        self.num_pixels = sensor_size[0]*sensor_size[1]
+        self.image = np.ones(sensor_size)
+
+    def set_init(self, value):
+        self.image = np.ones_like(self.image)*value
+
+    def add_event(self, x, y, t, p):
+        self.image[int(y), int(x)] = t
+
+    def add_events(self, xs, ys, ts, ps):
+        for x, y, t in zip(xs, ys, ts):
+            self.add_event(x, y, t, 0)
+
+    def get_image(self):
+        sort_args = rankdata(self.image, method='dense')
+        sort_args = sort_args-1
+        sort_args = sort_args.reshape(self.sensor_size)
+        sort_args = sort_args/np.max(sort_args)
+        return sort_args
+
+class EventImage:
+
+    def __init__(self, sensor_size):
+        self.sensor_size = sensor_size
+        self.num_pixels = sensor_size[0]*sensor_size[1]
+        self.image = np.ones(sensor_size)
+
+    def add_event(self, x, y, t, p):
+        self.image[int(y), int(x)] += p
+
+    def add_events(self, xs, ys, ts, ps):
+        for x, y, t in zip(xs, ys, ts):
+            self.add_event(x, y, t, 0)
+
+    def get_image(self):
+        mn, mx = np.min(self.image), np.max(self.image)
+        norm_img = (self.image-mn)/(mx-mn)
+        return norm_img

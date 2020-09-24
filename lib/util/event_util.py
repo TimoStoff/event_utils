@@ -22,23 +22,24 @@ def clip_events_to_bounds(xs, ys, ts, ps, bounds, set_zero=False):
     :param: ps p coords of events (may be None)
     :param: bounds the bounds of the events. Must be list of
         length 2 (in which case the lower bound is assumed to be 0,0)
-        or length 4, in format [min_y, min_x, max_y, max_x]
+        or length 4, in format [min_y, max_y, min_x, max_x]
     :param: set_zero if True, simply multiplies the out of bounds events with 0 mask.
         Otherwise, removes the events.
     """
     if len(bounds) == 2:
-        bounds = [0, 0, bounds[0], bounds[1]]
+        bounds = [0, bounds[0], 0, bounds[1]]
     elif len(bounds) != 4:
         raise Exception("Bounds must be of length 2 or 4 (not {})".format(len(bounds)))
+    miny, maxy, minx, maxx = bounds
     if set_zero:
-        mask = events_bounds_mask(xs, ys, bounds[1], bounds[3], bounds[0], bounds[2])
+        mask = events_bounds_mask(xs, ys, minx, maxx, miny, maxy)
         ts_mask = None if ts is None else ts*mask
         ps_mask = None if ps is None else ps*mask
         return xs*mask, ys*mask, ts_mask, ps_mask
     else:
-        x_clip_idc = np.argwhere((xs >= bounds[1]) & (xs < bounds[3]))[:, 0]
+        x_clip_idc = np.argwhere((xs >= minx) & (xs < maxx))[:, 0]
         y_subset = ys[x_clip_idc]
-        y_clip_idc = np.argwhere((y_subset >= bounds[0]) & (y_subset < bounds[2]))[:, 0]
+        y_clip_idc = np.argwhere((y_subset >= miny) & (y_subset < maxy))[:, 0]
 
         xs_clip = xs[x_clip_idc][y_clip_idc]
         ys_clip = ys[x_clip_idc][y_clip_idc]

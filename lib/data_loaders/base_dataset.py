@@ -52,11 +52,13 @@ class BaseVoxelDataset(Dataset):
             * "k_events" (new voxels are formed every k events)
             * "t_seconds" (new voxels are formed every t seconds)
             * "between_frames" (all events between frames are taken, requires frames to exist)
+            * "fixed_frames" ('num_frames' voxels formed at even intervals)
             A sliding window width must be given for k_events and t_seconds,
             which determines overlap (no overlap if set to 0). Eg:
             method={'method':'k_events', 'k':10000, 'sliding_window_w':100}
             method={'method':'t_events', 't':0.5, 'sliding_window_t':0.1}
             method={'method':'between_frames'}
+            method={'method':'fixed_frames', 'num_frames':100}
             Default is 'between_frames'.
     """
 
@@ -99,10 +101,16 @@ class BaseVoxelDataset(Dataset):
         """
         raise NotImplementedError
 
+    def ts(self, index):
+        """
+        Get timestamp at index
+        """
+        raise NotImplementedError
+
     def __init__(self, data_path, transforms={}, sensor_resolution=None, num_bins=5,
-                 voxel_method=None, max_length=None, combined_voxel_channels=False,
+                 voxel_method={'method': 'between_frames'}, max_length=None, combined_voxel_channels=False,
                  return_events=False, return_voxelgrid=True, return_frame=True, return_prev_frame=False,
-                 return_flow=True, return_prev_flow=False):
+                 return_flow=True, return_prev_flow=False, return_format='torch'):
 
         self.num_bins = num_bins
         self.data_path = data_path
@@ -110,6 +118,8 @@ class BaseVoxelDataset(Dataset):
         self.sensor_resolution = sensor_resolution
         self.data_source_idx = -1
         self.has_flow = False
+        self.return_format = return_format
+        self.counter = 0
 
         self.return_events = return_events
         self.return_voxelgrid = return_voxelgrid
@@ -132,8 +142,6 @@ class BaseVoxelDataset(Dataset):
         self.num_pixels = self.sensor_resolution[0] * self.sensor_resolution[1]
         self.duration = self.tk - self.t0
 
-        if voxel_method is None:
-            voxel_method = {'method': 'between_frames'}
         self.set_voxel_method(voxel_method)
 
         self.normalize_voxels = False
@@ -160,16 +168,12 @@ class BaseVoxelDataset(Dataset):
     @staticmethod
     def preprocess_events(xs, ys, ts, ps):
         if len(xs) == 0:
-            txs = torch.zeros((1), dtype=torch.float32)
-            tys = torch.zeros((1), dtype=torch.float32)
-            tts = torch.zeros((1), dtype=torch.float32)
-            tps = torch.zeros((1), dtype=torch.float32)
-        else:
-            txs = torch.from_numpy(xs.astype(np.float32))
-            tys = torch.from_numpy(ys.astype(np.float32))
-            tts = torch.from_numpy((ts-ts[0]).astype(np.float32))
-            tps = torch.from_numpy(ps.astype(np.float32))
-        return txs, tys, tts, tps
+            txs = np.zeros((1))
+            tys = np.zeros((1))
+            tts = np.zeros((1))
+            tps = np.zeros((1))
+            return txs, tys, tts, tps
+        return xs, ys, ts, ps
 
     def __getitem__(self, index, seed=None):
         """
@@ -177,7 +181,8 @@ class BaseVoxelDataset(Dataset):
             :param index: index of data
             :param seed: random seed for data augmentation
         """
-        assert 0 <= index < self.__len__(), "index {} out of bounds (0 <= x < {})".format(index, self.__len__())
+        if index < 0 or index >= self.__len__():
+            raise IndexError
         seed = random.randint(0, 2 ** 32) if seed is None else seed
 
         idx0, idx1 = self.get_event_indices(index)
@@ -195,37 +200,77 @@ class BaseVoxelDataset(Dataset):
             item['voxel'] = voxel
 
         if self.voxel_method['method'] == 'between_frames':
-            frame = self.get_frame(index + 1)
+            frame = self.get_frame(index)
             frame = self.transform_frame(frame, seed)
 
             if self.has_flow:
-                flow = self.get_flow(index + 1)
+                flow = self.get_flow(index)
                 # convert to displacement (pix)
                 flow = flow * dt
                 flow = self.transform_flow(flow, seed)
             else:
-                flow = torch.zeros((2, frame.shape[-2], frame.shape[-1]), dtype=frame.dtype, device=frame.device)
+                if self.return_format == 'torch':
+                    flow = torch.zeros((2, frame.shape[-2], frame.shape[-1]), dtype=frame.dtype, device=frame.device)
+                else:
+                    flow = np.zeros((2, frame.shape[-2], frame.shape[-1]))
+
             if self.return_flow:
                 item['flow'] = flow
+                item['flow_ts'] = self.frame_ts[index]
             if self.return_prev_flow:
                 prev_flow = flow if not self.has_flow else self.get_flow(index)
                 item['prev_flow'] = self.transform_flow(prev_flow, seed)
             if self.return_frame:
                 item['frame'] = frame
+                item['frame_ts'] = self.frame_ts[index]
             if self.return_prev_frame:
                 item['prev_frame'] = self.transform_frame(self.get_frame(index), seed)
-            if self.return_events:
+        else:
+            fi = self.frame_indices[index]
+            if self.return_frame:
+                if fi[0] != -1:
+                    frames = [self.transform_frame(self.get_frame(fidx), seed) for fidx in range(fi[1]-fi[0])]
+                    frame_ts = self.frame_ts[fi[0]:fi[1]]
+                else:
+                    frames = []
+                    frame_ts = []
+                item['frame'] = frames
+                item['frame_ts'] = frame_ts
+
+            if self.return_flow:
+                if fi[0] != -1 and self.has_flow:
+                    flows = [self.transform_flow(self.get_flow(fidx), seed) for fidx in range(fi[0], fi[1], 1)]
+                    flow_ts = self.frame_ts[fi[0]:fi[1]]
+                else:
+                    flows = []
+                    flow_ts = []
+                item['flow'] = flows
+                item['flow_ts'] = flow_ts
+
+        if self.return_events:
+            if self.return_format == 'torch':
                 if idx0-idx1 == 0:
                     item['events'] = torch.zeros((1, 4), dtype=torch.float32)
                     item['events_batch_indices'] = torch.ones((1))
                     item['ts_idx0'] = torch.zeros((1), dtype=torch.float64)
                 else:
-                    item['events'] = torch.from_numpy(np.concatenate((xs, ys, ts-ts_0, ps), axis=1)).float()
+                    item['events'] = torch.from_numpy(np.stack((xs, ys, ts-ts_0, ps), axis=1)).float()
                     item['events_batch_indices'] = idx1-idx0
                     item['ts_idx0'] = torch.tensor(ts_0)
+            elif self.return_format == 'numpy':
+                if idx0-idx1 == 0:
+                    item['events'] = np.zeros((1, 4))
+                    item['events_batch_indices'] = np.ones((1))
+                    item['ts_idx0'] = np.zeros((1))
+                else:
+                    item['events'] = np.stack((xs, ys, ts, ps), axis=1)
+                    item['events_batch_indices'] = idx1-idx0
+                    item['ts_idx0'] = np.array(ts_0)
+            else:
+                raise Exception("Invalid event format '{}' used".format(self.return_format))
         return item
 
-    def compute_frame_indices(self):
+    def compute_between_frame_indices(self):
         """
         For each frame, find the start and end indices of the
         time synchronized events
@@ -266,6 +311,21 @@ class BaseVoxelDataset(Dataset):
             k_indices.append([idx0, idx1])
         return k_indices
 
+    def compute_per_frame_indices(self):
+        """
+        For each set of event_indices, find the enclosed frame indices
+        """
+        frame_indices = []
+        for indices in self.event_indices:
+            s_t, e_t = self.ts(indices[0]), self.ts(indices[1])
+            idx0 = min(np.searchsorted(self.frame_ts, s_t), len(self.frame_ts)-1)
+            idx1 = min(np.searchsorted(self.frame_ts, e_t), len(self.frame_ts)-1)
+            if idx0 == idx1:
+                frame_indices.append([-1, -1])
+            else:
+                frame_indices.append([idx0, idx1])
+        return frame_indices
+
     def set_voxel_method(self, voxel_method):
         """
         Given the desired method of computing voxels,
@@ -278,11 +338,17 @@ class BaseVoxelDataset(Dataset):
         elif self.voxel_method['method'] == 't_seconds':
             self.length = max(int(self.duration / (voxel_method['t'] - voxel_method['sliding_window_t'])), 0)
             self.event_indices = self.compute_timeblock_indices()
+        elif self.voxel_method['method'] == 'fixed_frames':
+            self.length = self.voxel_method['num_frames']
+            self.voxel_method['t'] = (self.tk-self.t0)/self.length
+            voxel_method['sliding_window_t'] = 0
+            self.event_indices = self.compute_timeblock_indices()
         elif self.voxel_method['method'] == 'between_frames':
             self.length = self.num_frames - 1
-            self.event_indices = self.compute_frame_indices()
+            self.event_indices = self.compute_between_frame_indices()
         else:
             raise Exception("Invalid voxel forming method chosen ({})".format(self.voxel_method))
+        self.frame_indices = self.compute_per_frame_indices()
         if self.length == 0:
             raise Exception("Current voxel generation parameters lead to sequence length of zero")
 
@@ -325,10 +391,11 @@ class BaseVoxelDataset(Dataset):
         """
         Augment frame and turn into tensor
         """
-        frame = torch.from_numpy(frame).float().unsqueeze(0) / 255
-        if self.transform:
-            random.seed(seed)
-            frame = self.transform(frame)
+        if self.return_format == "torch":
+            frame = torch.from_numpy(frame).float().unsqueeze(0) / 255
+            if self.transform:
+                random.seed(seed)
+                frame = self.transform(frame)
         return frame
 
     def transform_voxel(self, voxel, seed):
@@ -344,11 +411,19 @@ class BaseVoxelDataset(Dataset):
         """
         Augment flow and turn into tensor
         """
-        flow = torch.from_numpy(flow)  # should end up [2 x H x W]
-        if self.transform:
-            random.seed(seed)
-            flow = self.transform(flow, is_flow=True)
+        if self.return_format == "torch":
+            flow = torch.from_numpy(flow)  # should end up [2 x H x W]
+            if self.transform:
+                random.seed(seed)
+                flow = self.transform(flow, is_flow=True)
         return flow
+
+    def size(self):
+        return self.sensor_resolution
+
+    @staticmethod
+    def unpackage_events(events):
+        return events[:,0], events[:,1], events[:,2], events[:,3]
 
     @staticmethod
     def collate_fn(data, event_keys=['events'], idx_keys=['events_batch_indices']):

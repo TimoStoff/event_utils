@@ -1,6 +1,6 @@
 import h5py
-from util.event_util import binary_search_h5_dset
-from base_dataset import BaseVoxelDataset
+from ..util.event_util import binary_search_h5_dset
+from .base_dataset import BaseVoxelDataset
 
 class DynamicH5Dataset(BaseVoxelDataset):
     """
@@ -22,6 +22,7 @@ class DynamicH5Dataset(BaseVoxelDataset):
         return xs, ys, ts, ps
 
     def load_data(self, data_path):
+        self.data_sources = ('esim', 'ijrr', 'mvsec', 'eccd', 'hqfd', 'unknown')
         try:
             self.h5_file = h5py.File(data_path, 'r')
         except OSError as err:
@@ -44,13 +45,16 @@ class DynamicH5Dataset(BaseVoxelDataset):
 
         data_source = self.h5_file.attrs.get('source', 'unknown')
         try:
-            self.data_source_idx = data_sources.index(data_source)
+            self.data_source_idx = self.data_sources.index(data_source)
         except ValueError:
             self.data_source_idx = -1
 
     def find_ts_index(self, timestamp):
         idx = binary_search_h5_dset(self.h5_file['events/ts'], timestamp)
         return idx
+
+    def ts(self, index):
+        return self.h5_file['events/ts'][index]
 
     def compute_frame_indices(self):
         frame_indices = []

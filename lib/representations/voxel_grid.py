@@ -217,12 +217,13 @@ def events_to_voxel(xs, ys, ts, ps, B, sensor_size=(180, 240), temporal_bilinear
         if temporal_bilinear:
             bilinear_weights = np.maximum(zeros, 1.0-np.abs(t_norm-bi))
             weights = ps*bilinear_weights
+            vb = events_to_image(xs.squeeze(), ys.squeeze(), weights.squeeze(),
+                    sensor_size=sensor_size, interpolation=None)
         else:
             beg = bi*num_events_per_bin
             end = beg + num_events_per_bin
             vb = events_to_image(xs[beg:end], ys[beg:end],
                     weights[beg:end], sensor_size=sensor_size)
-        vb = events_to_image(xs, ys, weights.squeeze(), sensor_size=sensor_size, interpolation=None)
         bins.append(vb)
     bins = np.stack(bins)
     return bins
