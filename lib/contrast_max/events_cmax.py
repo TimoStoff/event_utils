@@ -10,70 +10,7 @@ from ..util.util import plot_image, save_image, plot_image_grid
 from ..visualization.draw_event_stream import plot_events
 from .objectives import *
 from .warps import *
-from ..representations.image import events_to_timestamp_image
-import matplotlib.pyplot as plt
 
-def get_hsv_shifted():
-    from matplotlib import cm
-    from matplotlib.colors import LinearSegmentedColormap
-
-    hsv = cm.get_cmap('hsv')
-    hsv_shifted = []
-    for i in np.arange(0, 0.6666, 0.01):
-        hsv_shifted.append(hsv(np.fmod(i+0.6666, 1.0)))
-    hsv_shifted = LinearSegmentedColormap.from_list('hsv_shifted', hsv_shifted, N=100)
-    return hsv_shifted
-
-def find_event_change(w_ori, w_dx, w_dy, mean, orig, dx, dy):
-    print("Mean ts = {}".format(mean))
-    weight_ori = image_to_event_weights(w_ori[0], w_ori[1], orig)
-    weight_dx = image_to_event_weights(w_dx[0], w_dx[1], dx)
-    weight_dy = image_to_event_weights(w_dy[0], w_dy[1], dy)
-
-    d_ori_mean = np.abs(weight_ori-mean)
-    d_d_mean = np.abs(weight_dx-mean)
-    print(weight_ori)
-    print(mean)
-    print(d_ori_mean)
-
-    xs, ys = w_ori[0], w_ori[1]
-    img1 = events_to_image(xs, ys, d_ori_mean, interpolation='bilinear', meanval=True)
-
-    xs, ys = w_dx[0], w_dx[1]
-    img2 = events_to_image(xs, ys, d_d_mean, interpolation='bilinear', meanval=True)
-
-    hsv_shifted = get_hsv_shifted()
-    plot_image(img1, cmap=hsv_shifted, colorbar=True)
-    plot_image(img2, cmap=hsv_shifted, colorbar=True)
-
-    xs, ys = w_ori[0], w_ori[1]
-    diff = -(d_ori_mean-d_d_mean)
-    diff_img = events_to_image(xs, ys, diff, interpolation='bilinear')
-    plot_image(diff_img, cmap=hsv_shifted, colorbar=True)
-
-    pos = np.where(diff>0.1, 1, 0)
-    diff_img = events_to_image(xs, ys, pos, interpolation='bilinear')
-    plot_image(diff_img, cmap=hsv_shifted, colorbar=True)
-
-
-def seg_ts_image(xs, ys, ts, ps, sensor_size):
-    #Get the timestamp image
-    ts_img = events_to_timestamp_image(xs, ys, ts, ps, sensor_size=sensor_size, normalize_timestamps=False)
-    ts_img = (ts_img[0]+ts_img[1]).astype('float64')
-    #ts_img += ts[0]
-
-    #avg_ts = np.mean(ts)
-    #ts_rng = ts[-1]-ts[0]
-    #thresh = ts_rng*0.01
-    #print("rng={}, thresh={}".format(ts_rng, thresh))
-    #mask = np.where(np.abs(ts_img-avg_ts) < thresh, 1, 0)
-    #masked = ts_img*mask
-    #plot_image(masked, lognorm=False, cmap='viridis')
-    #print("img max={} img min={}, img mean={}".format(np.max(ts_img), np.min(ts_img), np.mean(ts_img)))
-    #print("img max={} img min={}, img mean={}".format(np.max(ts), np.min(ts), np.mean(ts)))
-    return ts_img
-
-cnt = 0
 def grid_cmax(xs, ys, ts, ps, roi_size=(20,20), step=None, warp=linvel_warp(),
         obj=variance_objective(adaptive_lifespan=True, minimum_events=105)):
     step = roi_size if step is None else step
@@ -84,12 +21,12 @@ def grid_cmax(xs, ys, ts, ps, roi_size=(20,20), step=None, warp=linvel_warp(),
     results_rois = []
     results_f_evals = []
     samplenum = 0
+    min_events = 10
     print("Running grid search...")
-    for xc in range(80, resolution[1], step[1]):
+    for xc in range(0, resolution[1], step[1]):
         x_roi_idc = np.argwhere((xs>=xc) & (xs<xc+step[1]))[:, 0]
         y_subset = ys[x_roi_idc]
-        for yc in range(20, resolution[0], step[0]):
-            bbox = [(xc, yc), (xc+step[1], yc+step[0])]
+        for yc in range(0, resolution[0], step[0]):
             y_roi_idc = np.argwhere((y_subset>=yc) & (y_subset<yc+step[0]))[:, 0]
 
             roi_xs = xs[x_roi_idc][y_roi_idc]
@@ -97,7 +34,7 @@ def grid_cmax(xs, ys, ts, ps, roi_size=(20,20), step=None, warp=linvel_warp(),
             roi_ts = ts[x_roi_idc][y_roi_idc]
             roi_ps = ps[x_roi_idc][y_roi_idc]
 
-            if len(roi_xs) > 0:
+            if len(roi_xs) > min_events:
                 #params = optimize(roi_xs, roi_ys, roi_ts, roi_ps, warp, obj, numeric_grads=False)
                 obj = variance_objective(adaptive_lifespan=True, minimum_events=105)
                 print("OPTIMIZE using {} events".format(len(roi_xs)))
@@ -106,80 +43,65 @@ def grid_cmax(xs, ys, ts, ps, roi_size=(20,20), step=None, warp=linvel_warp(),
                 params = optimize_contrast(roi_xs, roi_ys, roi_ts, roi_ps, warp, obj, numeric_grads=False, blur_sigma=1.0, img_size=resolution, x0=params)
                 print("Final optimization param: {}".format(params))
                 print("===============")
-                #xsc, ysc, tsc, psc = cut_events_to_lifespan(xs, ys, ts, ps, params, 10, minimum_events=10)
-                xsc, ysc, tsc, psc = xs, ys, ts, ps
+                iwe, d_iwe = get_iwe(params, xs, ys, ts, ps, warp, resolution,
+                       use_polarity=True, compute_gradient=False, return_events=False)
+                f_eval = obj.evaluate_function(iwe=iwe)
 
-                #print the iwe and the diwe
-                iwe, d_iwe, (xw, ywe) = get_iwe(params, xsc, ysc, tsc, psc, warp, resolution,
-                       use_polarity=True, compute_gradient=True, return_events=True)
-                plot_image(iwe, bbox=[[xc,yc],[xc+step[1],yc+step[0]]], savename="/tmp/iwe_{}.jpg".format(0))
-                plot_image_grid([d_iwe[0], d_iwe[1]], norm=False, savename="/tmp/diwe_{}.jpg".format(0))
-
-                #Try mitrokhin timestamp thing
-                hsv_shifted = get_hsv_shifted()
-                xw1, yw1, jx, jy = warp.warp(xsc, ysc, tsc, psc, tsc[-1], params, compute_grad=False)
-                simg1=seg_ts_image(xw1, yw1, tsc, psc, resolution)
-
-                delta = 50
-                xw2, yw2, jx, jy = warp.warp(xsc, ysc, tsc, psc, tsc[-1], [params[0]+delta, params[1]], compute_grad=False)
-                simg2=seg_ts_image(xw2, yw2, tsc, psc, resolution)
-
-                xw3, yw3, jx, jy = warp.warp(xsc, ysc, tsc, psc, tsc[-1], [params[0], params[1]+delta], compute_grad=False)
-                simg3=seg_ts_image(xw3, yw3, tsc, psc, resolution)
-
-                plot_image_grid([simg1, simg2, simg3], lognorm=False, cmap=hsv_shifted, norm=True, colorbar=True)
-
-                normalized_ts = tsc-tsc[0]
-                mean_ts = np.mean(normalized_ts)
-                find_event_change([xw1, yw1], [xw2, yw2], [xw3, yw3], mean_ts, simg1, simg2, simg3)
-                return
-
-                for i in range(1, 100, 10):
-                    img1, d_iwe, (wx,wy), ew1 = get_iwe(params, xsc, ysc, tsc, psc, warp, resolution,
-                           use_polarity=True, return_per_event_contrast=True, return_events=True)
-                    img1 = events_to_image(wx, wy, psc, interpolation='bilinear', padding=True)
-                    plot_image(img1, savename="/tmp/img1_{}.jpg".format(i))
-                    ew1 = image_to_event_weights(wx, wy, img1)
-                    params2 = params + np.array([i, i])
-                    print(params2)
-                    img2, d_iwe, ew2 = get_iwe(params2, xsc, ysc, tsc, psc, warp, resolution,
-                           use_polarity=True, return_per_event_contrast=True)
-                    img3 = img1-img2
-                    dew = ew1-ew2
-
-                    dew_iwe, d_iwe = get_iwe(params2, xsc, ysc, tsc, dew, warp, resolution,
-                           use_polarity=True)
-                    re_iwe = events_to_image(wx, wy, ew1, interpolation='bilinear')
-                    plot_image(re_iwe, savename="/tmp/re_iwe_{}.jpg".format(i))
-
-                    plot_image_grid([img1, img2, img3], norm=False, savename="/tmp/img_comp{}.jpg".format(i))
-                    save_image(img3, fname="/tmp/img_{}.jpg".format(i))
-                    save_image(dew_iwe, fname="/tmp/dew_{}.jpg".format(i))
-
-
-
-                #seg_mask = gaussian_filter(segmentation_mask_from_d_iwe(d_iwe), 1.0)
-                seg_mask = segmentation_mask_from_d_iwe(d_iwe).astype(np.float)
-                plot_image(seg_mask)
-                seg_mask = gaussian_filter(seg_mask, sigma=1)
-
-                event_ind = get_events_from_mask(seg_mask, xw, yw)
-                print(event_ind.shape)
-                segx = xsc[event_ind[0:10000]]
-                segy = ysc[event_ind[0:10000]]
-                segt = tsc[event_ind[0:10000]]
-                segp = psc[event_ind[0:10000]]
-                img = [np.ones((180,240), dtype=np.float)]
-                img_ts = [segt[0]]
-                plot_events(240-segx, 180-segy, segt, segp, show_plot=True, num_show=-1, img_size=(180,240), num_compress=1000)
-                print(len(segx))
-
-                #save_image(iwe, fname="/tmp/vis/img_{:09d}.png".format(samplenum), bbox=[[xc,yc],[xc+step[1],yc+step[0]]])
                 samplenum += 1
                 results_params.append(params)
-                results_rois.append([yc, xc, yc+step[0], xc+step[1]])
+                results_rois.append([yc, xc, step[0], step[1]])
                 results_f_evals.append(obj.evaluate_function(iwe=iwe))
-    return results_params, results_f_evals, results_rois
+
+                #return [params], 0
+                ##xsc, ysc, tsc, psc = cut_events_to_lifespan(xs, ys, ts, ps, params, 10, minimum_events=10)
+                #xsc, ysc, tsc, psc = xs, ys, ts, ps
+                #iwe, d_iwe, (xw, ywe) = get_iwe(params, xsc, ysc, tsc, psc, warp, resolution,
+                #       use_polarity=True, compute_gradient=True, return_events=True)
+                #plot_image(iwe, bbox=[xc,yc,step[1],step[0]], savename="/tmp/iwe_{}.jpg".format(0))
+                #plot_image_grid([d_iwe[0], d_iwe[1]], norm=False, savename="/tmp/diwe_{}.jpg".format(0))
+
+                # Old segmentation
+                #for i in range(1, 100, 10):
+                #    img1, d_iwe, (wx,wy), ew1 = get_iwe(params, xsc, ysc, tsc, psc, warp, resolution,
+                #           use_polarity=True, return_per_event_contrast=True, return_events=True)
+                #    img1 = events_to_image(wx, wy, psc, interpolation='bilinear', padding=True)
+                #    plot_image(img1, savename="/tmp/img1_{}.jpg".format(i))
+                #    ew1 = image_to_event_weights(wx, wy, img1)
+                #    params2 = params + np.array([i, i])
+                #    print(params2)
+                #    img2, d_iwe, ew2 = get_iwe(params2, xsc, ysc, tsc, psc, warp, resolution,
+                #           use_polarity=True, return_per_event_contrast=True)
+                #    img3 = img1-img2
+                #    dew = ew1-ew2
+
+                #    dew_iwe, d_iwe = get_iwe(params2, xsc, ysc, tsc, dew, warp, resolution,
+                #           use_polarity=True)
+                #    re_iwe = events_to_image(wx, wy, ew1, interpolation='bilinear')
+                #    plot_image(re_iwe, savename="/tmp/re_iwe_{}.jpg".format(i))
+
+                #    plot_image_grid([img1, img2, img3], norm=False, savename="/tmp/img_comp{}.jpg".format(i))
+                #    save_image(img3, fname="/tmp/img_{}.jpg".format(i))
+                #    save_image(dew_iwe, fname="/tmp/dew_{}.jpg".format(i))
+
+
+
+                ##seg_mask = gaussian_filter(segmentation_mask_from_d_iwe(d_iwe), 1.0)
+                #seg_mask = segmentation_mask_from_d_iwe(d_iwe).astype(np.float)
+                #plot_image(seg_mask)
+                #seg_mask = gaussian_filter(seg_mask, sigma=1)
+
+                #event_ind = get_events_from_mask(seg_mask, xw, yw)
+                #print(event_ind.shape)
+                #segx = xsc[event_ind[0:10000]]
+                #segy = ysc[event_ind[0:10000]]
+                #segt = tsc[event_ind[0:10000]]
+                #segp = psc[event_ind[0:10000]]
+                #img = [np.ones((180,240), dtype=np.float)]
+                #img_ts = [segt[0]]
+                #plot_events(240-segx, 180-segy, segt, segp, show_plot=True, num_show=-1, img_size=(180,240), num_compress=1000)
+                #print(len(segx))
+
+    return results_params, results_rois, results_f_evals
 
 def segmentation_mask_from_d_iwe(d_iwe, th=None):
     th1 = np.percentile(np.abs(d_iwe), 90)
