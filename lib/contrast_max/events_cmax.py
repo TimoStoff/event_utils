@@ -226,6 +226,7 @@ def recursive_search(xs, ys, ts, ps, warp_function, objective_function, img_size
     :param: max_iters maximum number of iterations
     """
     assert num_samples_per_param%2==1 and num_samples_per_param>=5
+
     optimal = grid_search_initial(xs, ys, ts, ps, warp_function, copy.deepcopy(objective_function),
             img_size, param_ranges=param_ranges, log_scale=log_scale,
             num_samples_per_param=num_samples_per_param)
@@ -233,17 +234,17 @@ def recursive_search(xs, ys, ts, ps, warp_function, objective_function, img_size
     params = optimal["min_params"]
     new_param_ranges = []
     max_range = 0
+    # Iterate over each search axis and each element of the 
+    # optimal parameter to find new search range
     for sa, param in zip(optimal["search_axes"], params):
         new_range = find_new_range(sa, param)
         new_param_ranges.append(new_range)
         max_range = np.abs(new_range[1]-new_range[0]) if np.abs(new_range[1]-new_range[0]) > max_range else max_range
-    #print("--- Depth={}, range={} ---".format(depth, max_range))
     if max_range >= th0 and depth < max_iters:
         return recursive_search(xs,ys,ts,ps,warp_function,objective_function,img_size,
                 param_ranges=new_param_ranges, log_scale=log_scale,
                 num_samples_per_param=num_samples_per_param, depth=depth+1)
     else:
-        #print("SOFAS search: {}".format(optimal["min_params"]))
         return optimal
 
 
@@ -251,7 +252,8 @@ def recursive_search(xs, ys, ts, ps, warp_function, objective_function, img_size
 def grid_search_initial(xs, ys, ts, ps, warp_function, objective_function, img_size, param_ranges=None,
         log_scale=True, num_samples_per_param=5):
     """
-    Perform a grid search for a good starting candidate.
+    Perform a grid search for a good starting candidate. Works by placing sample coordinates (coords)
+    in the search space (param_ranges) (either evenly spaced or on a log scale) and evaluating each sample.
     :param: xs x components of events
     :param: ys y components of events
     :param: ts t components of events
@@ -268,6 +270,10 @@ def grid_search_initial(xs, ys, ts, ps, warp_function, objective_function, img_s
     :param: num_samples_per_param how many samples to take per parameter. The number of evaluations
         this method needs to perform is equal to num_samples_per_param^warp_function.dims. Thus,
         for high dimensional warp functions, it is advised to keep this value low.
+    :return: optimal is a dict with keys 'params' (the list of sampling coordinates used),
+        'eval' (the evaluation at each sample coordinate), 'search_axes' (the sample coordinates on each parameter axis),
+        'min_params' (the best parameter, minimsing the optimisation problem) and 'min_func_eval' (the function value at
+        the best parameter).
     """
     assert num_samples_per_param%2 == 1
 
@@ -278,14 +284,11 @@ def grid_search_initial(xs, ys, ts, ps, warp_function, objective_function, img_s
     else:
         scale = np.linspace(0, 1.0, int(num_samples_per_param/2.0)+1)[1:]
 
+    # If the parameter ranges are empty, intialise them
     if param_ranges is None:
         param_ranges = []
         for i in range(warp_function.dims):
             param_ranges.append([-150, 150])
-
-    #draw_objective_function(xs, ys, ts, ps, variance_objective(), linvel_warp(), x_range=param_ranges[0], y_range=param_ranges[1], show_gt=False, resolution=2)
-    #old_xlim = plt.xlim()
-    #old_ylim = plt.ylim()
 
     axes = []
     for param_range in param_ranges:
@@ -302,29 +305,17 @@ def grid_search_initial(xs, ys, ts, ps, warp_function, objective_function, img_s
     best_eval = 0
     best_params = None
 
-    #xpts, ypts = [], []
     for params in zip(*coords):
         f_eval = objective_function.evaluate_function(params=params, xs=xs, ys=ys, ts=ts, ps=ps,
                 warpfunc=warp_function, img_size=img_size, blur_sigma=1.0)
-        #xpts.append(params[0])
-        #ypts.append(params[1])
-        #print("{}: {}".format(params, f_eval))
         output["params"].append(params)
         output["eval"].append(f_eval)
         if f_eval < best_eval:
             best_eval = f_eval
             best_params = params
 
-    #xpts = (xpts-min(xpts))/(max(xpts)-min(xpts))*(old_xlim[1]-old_xlim[0])+old_xlim[0]
-    #ypts = (ypts-min(ypts))/(max(ypts)-min(ypts))*(old_ylim[0]-old_ylim[1])+old_ylim[1]
-    #plt.xlim(old_xlim)
-    #plt.ylim(old_ylim)
-    #plt.scatter(xpts, ypts, c='r', marker='x')
-    #plt.show()
-
     output["min_params"] = best_params
     output["min_func_eval"] = best_eval
-    #print("min @ {}: {}".format(best_params, best_eval))
     return output
 
 def optimize_contrast(xs, ys, ts, ps, warp_function, objective, optimizer=opt.fmin_bfgs, x0=None,
@@ -355,8 +346,6 @@ def optimize_contrast(xs, ys, ts, ps, warp_function, objective, optimizer=opt.fm
         init_obj = copy.deepcopy(objective)
         init_obj.adaptive_lifespan = False
         minv = recursive_search(xs, ys, ts, ps, warp_function, init_obj, img_size, log_scale=False)
-        #xs, ys, ts, ps = cut_events_to_lifespan(xs, ys, ts, ps, minv["min_params"], 5, minimum_events=minimum_events)
-        #minv = grid_search_initial(xs, ys, ts, ps, warp_function, objective, img_size, log_scale=False)
         x0 = minv["min_params"]
     elif x0 is None:
         x0 = np.array([0,0])
