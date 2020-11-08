@@ -4,9 +4,8 @@ import torchvision.transforms
 
 
 class Compose(object):
-    """Composes several transforms together.
-    Args:
-        transforms (list of ``Transform`` objects): list of transforms to compose.
+    """
+    Composes several transforms together.
     Example:
         >>> torchvision.transforms.Compose([
         >>>     torchvision.transforms.CenterCrop(10),
@@ -15,9 +14,18 @@ class Compose(object):
     """
 
     def __init__(self, transforms):
+        """
+        @param transforms (list of ``Transform`` objects): list of transforms to compose.
+        """
         self.transforms = transforms
 
     def __call__(self, x, is_flow=False):
+        """
+        Call the transform.
+        @param x The tensor to transform
+        @param is_flow Set true if tensor represents optic flow
+        @returns Transformed tensor
+        """
         for t in self.transforms:
             x = t(x, is_flow)
         return x
@@ -32,7 +40,8 @@ class Compose(object):
 
 
 class CenterCrop(object):
-    """Center crop the tensor to a certain size.
+    """
+    Center crop the tensor to a certain size.
     """
 
     def __init__(self, size, preserve_mosaicing_pattern=False):
@@ -45,10 +54,9 @@ class CenterCrop(object):
 
     def __call__(self, x, is_flow=False):
         """
-            x: [C x H x W] Tensor to be rotated.
-            is_flow: this parameter does not have any effect
-        Returns:
-            Tensor: Cropped tensor.
+            @param x [C x H x W] Tensor to be rotated.
+            @param is_flow this parameter does not have any effect
+            @returns Cropped tensor.
         """
         w, h = x.shape[2], x.shape[1]
         th, tw = self.size
@@ -74,7 +82,8 @@ class CenterCrop(object):
 class RobustNorm(object):
 
     """
-    Robustly normalize tensor
+    Robustly normalize tensor (ie normalise it between top and 
+    bottom centiles of tensor value range)
     """
 
     def __init__(self, low_perc=0, top_perc=95):
@@ -85,15 +94,13 @@ class RobustNorm(object):
     def percentile(t, q):
         """
         Return the ``q``-th percentile of the flattened input tensor's data.
-        
         CAUTION:
          * Needs PyTorch >= 1.1.0, as ``torch.kthvalue()`` is used.
          * Values are not interpolated, which corresponds to
            ``numpy.percentile(..., interpolation="nearest")``.
-           
-        :param t: Input tensor.
-        :param q: Percentile to compute, which must be between 0 and 100 inclusive.
-        :return: Resulting value (scalar).
+        @param t Input tensor.
+        @param q Percentile to compute, which must be between 0 and 100 inclusive.
+        @returns Resulting value (scalar).
         """
         # Note that ``kthvalue()`` works one-based, i.e. the first sorted value
         # indeed corresponds to k=1, not k=0! Use float(q) instead of q directly,
@@ -107,6 +114,10 @@ class RobustNorm(object):
 
     def __call__(self, x, is_flow=False):
         """
+        Call the transform.
+        @param x The tensor to normalise
+        @param is_flow Set true if the tensor represents optic flow
+        @returns Normalised tensor
         """
         t_max = self.percentile(x, self.top_perc)
         t_min = self.percentile(x, self.low_perc)

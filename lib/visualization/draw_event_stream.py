@@ -154,7 +154,8 @@ def plot_events(xs, ys, ts, ps, save_path=None, num_compress='auto', num_show=10
     """
     #Crop events
     if img_size is None:
-        img_size = [max(ys), max(ps)] if len(imgs)==0 else imgs[0].shape[0:2]
+        img_size = [max(ys), max(xs)] if len(imgs)==0 else imgs[0].shape[0:2]
+        print("Inferred image size = {}".format(img_size))
     crop = [0, img_size[0], 0, img_size[1]] if crop is None else crop
     xs, ys, ts, ps = clip_events_to_bounds(xs, ys, ts, ps, crop, set_zero=False)
     xs, ys = xs-crop[2], ys-crop[0]

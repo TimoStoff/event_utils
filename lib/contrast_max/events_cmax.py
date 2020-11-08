@@ -14,6 +14,9 @@ from ..representations.image import events_to_timestamp_image
 import matplotlib.pyplot as plt
 
 def get_hsv_shifted():
+    """
+    Get the colormap used in Mitrokhin etal, Event-based Moving Object Detection and Tracking
+    """
     from matplotlib import cm
     from matplotlib.colors import LinearSegmentedColormap
 
@@ -25,16 +28,12 @@ def get_hsv_shifted():
     return hsv_shifted
 
 def find_event_change(w_ori, w_dx, w_dy, mean, orig, dx, dy):
-    print("Mean ts = {}".format(mean))
     weight_ori = image_to_event_weights(w_ori[0], w_ori[1], orig)
     weight_dx = image_to_event_weights(w_dx[0], w_dx[1], dx)
     weight_dy = image_to_event_weights(w_dy[0], w_dy[1], dy)
 
     d_ori_mean = np.abs(weight_ori-mean)
     d_d_mean = np.abs(weight_dx-mean)
-    print(weight_ori)
-    print(mean)
-    print(d_ori_mean)
 
     xs, ys = w_ori[0], w_ori[1]
     img1 = events_to_image(xs, ys, d_ori_mean, interpolation='bilinear', meanval=True)
@@ -73,9 +72,21 @@ def seg_ts_image(xs, ys, ts, ps, sensor_size):
     #print("img max={} img min={}, img mean={}".format(np.max(ts), np.min(ts), np.mean(ts)))
     return ts_img
 
-cnt = 0
 def grid_cmax(xs, ys, ts, ps, roi_size=(20,20), step=None, warp=linvel_warp(),
         obj=variance_objective(adaptive_lifespan=True, minimum_events=105)):
+    """
+    Break sensor into a grid and perform contrast maximisation on each sector of grid
+    separately.
+    @param xs x components of events as list
+    @param ys y components of events as list
+    @param ts t components of events as list
+    @param ps p components of events as list
+    @param roi_size The size of the grid regions of interest (rois)
+    @param step The sliding window step size (same as roi_size if left empty)
+    @param warp The warp function to be used
+    @param The objective fuction to be used
+    @returns List of optimal parameters, optimal function evaluations and rois
+    """
     step = roi_size if step is None else step
     resolution = infer_resolution(xs, ys)
     warpfunc = linvel_warp()
@@ -200,7 +211,8 @@ def segmentation_mask_from_d_iwe(d_iwe, th=None):
     img = np.clip(np.add(imgx, imgy), 0, 1)
     return img
 
-def draw_objective_function(xs, ys, ts, ps, objective, warpfunc, x_range=(-200, 200), y_range=(-200, 200),
+def draw_objective_function(xs, ys, ts, ps, objective=variance_objective(minimum_events=1),
+        warpfunc=linvel_warp(), x_range=(-200, 200), y_range=(-200, 200),
         gt=(0,0), show_gt=True, resolution=20, img_size=(180, 240), show_axes=True, norm_min=None, norm_max=None,
         show=True):
     """

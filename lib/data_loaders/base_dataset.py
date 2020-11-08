@@ -65,18 +65,22 @@ class BaseVoxelDataset(Dataset):
     def get_frame(self, index):
         """
         Get frame at index
+        @param index The index of the frame to get
         """
         raise NotImplementedError
 
     def get_flow(self, index):
         """
         Get optic flow at index
+        @param index The index of the optic flow to get
         """
         raise NotImplementedError
 
     def get_events(self, idx0, idx1):
         """
         Get events between idx0, idx1
+        @param idx0 Start index to get events from
+        @param idx1 End index to get events from
         """
         raise NotImplementedError
 
@@ -92,18 +96,21 @@ class BaseVoxelDataset(Dataset):
             self.num_events - the total number of events
             self.frame_ts - list of the timestamps of the frames
             self.num_frames - the number of frames
+        @param data_path The path to the data file/s containing events etc
         """
         raise NotImplementedError
 
     def find_ts_index(self, timestamp):
         """
         Given a timestamp, find the event index
+        @param timestamp The timestamp at which to find the corresponding event index
         """
         raise NotImplementedError
 
     def ts(self, index):
         """
         Get timestamp at index
+        @param Index of event whose timestamp to return
         """
         raise NotImplementedError
 
@@ -111,6 +118,37 @@ class BaseVoxelDataset(Dataset):
                  voxel_method={'method': 'between_frames'}, max_length=None, combined_voxel_channels=False,
                  return_events=False, return_voxelgrid=True, return_frame=True, return_prev_frame=False,
                  return_flow=True, return_prev_flow=False, return_format='torch'):
+        """
+        @param data_path Path to the file containing the event/image data
+        @param transforms Dict containing the desired augmentations
+        @param sensor_resolution The size of the image sensor from which the events originate
+        @param num_bins The number of bins desired in the voxel grid
+        @param voxel_method Which method should be used to form the voxels.
+            Currently supports:
+            * "k_events" (new voxels are formed every k events)
+            * "t_seconds" (new voxels are formed every t seconds)
+            * "between_frames" (all events between frames are taken, requires frames to exist)
+            * "fixed_frames" ('num_frames' voxels formed at even intervals)
+            A sliding window width must be given for k_events and t_seconds,
+            which determines overlap (no overlap if set to 0). Eg:
+            method={'method':'k_events', 'k':10000, 'sliding_window_w':100}
+            method={'method':'t_events', 't':0.5, 'sliding_window_t':0.1}
+            method={'method':'between_frames'}
+            method={'method':'fixed_frames', 'num_frames':100}
+            Default is 'between_frames'.
+        @param max_length Maximum capped length of dataset (no cap if left empty)
+        @param combined_voxel_channels If True, produces one voxel grid for all events, if False,
+            produces separate voxel grids for positive and negative channels
+        @param return_events If true, returns events in output dict
+        @param return_voxelgrid If true, returns voxelgrid in output dict
+        @param return_frame If true, returns frames in output dict
+        @param return_prev_frame If true, returns previous frame to current frame
+            in output dict
+        @param return_flow If true, returns optic flow in output dict
+        @param return_prev_flow If true, returns previous optic flow to current
+            optic flow in output dict
+        @param return_format The desired output format (options = 'numpy' and 'torch')
+        """
 
         self.num_bins = num_bins
         self.data_path = data_path
@@ -167,6 +205,13 @@ class BaseVoxelDataset(Dataset):
 
     @staticmethod
     def preprocess_events(xs, ys, ts, ps):
+    """
+    Given empty events, return single zero event
+    @param xs x compnent of events
+    @param ys y compnent of events
+    @param ts t compnent of events
+    @param ps p compnent of events
+    """
         if len(xs) == 0:
             txs = np.zeros((1))
             tys = np.zeros((1))
@@ -178,8 +223,10 @@ class BaseVoxelDataset(Dataset):
     def __getitem__(self, index, seed=None):
         """
         Get data at index.
-            :param index: index of data
-            :param seed: random seed for data augmentation
+        @param index Index of data
+        @param seed Random seed for data augmentation
+        @returns Dict with desired outputs (voxel grid, events, frames etc)
+            as set in constructor
         """
         if index < 0 or index >= self.__len__():
             raise IndexError
@@ -274,6 +321,7 @@ class BaseVoxelDataset(Dataset):
         """
         For each frame, find the start and end indices of the
         time synchronized events
+        @returns List of indices of events at each frame timestamp
         """
         frame_indices = []
         start_idx = 0
@@ -287,6 +335,7 @@ class BaseVoxelDataset(Dataset):
         """
         For each block of time (using t_events), find the start and
         end indices of the corresponding events
+        @returns List of indices of events at beginning and end of each block of time
         """
         timeblock_indices = []
         start_idx = 0
@@ -302,6 +351,8 @@ class BaseVoxelDataset(Dataset):
         """
         For each block of k events, find the start and
         end indices of the corresponding events
+        @returns List of indices of events at beginning and end of each block of
+            k events (with sliding window)
         """
         k_indices = []
         start_idx = 0
@@ -314,6 +365,7 @@ class BaseVoxelDataset(Dataset):
     def compute_per_frame_indices(self):
         """
         For each set of event_indices, find the enclosed frame indices
+        @returns List of frame indices at each event index
         """
         frame_indices = []
         for indices in self.event_indices:
@@ -330,6 +382,8 @@ class BaseVoxelDataset(Dataset):
         """
         Given the desired method of computing voxels,
         compute the event_indices lookup table and dataset length
+        @param voxel_method The method of voxel formation as set in constructor.
+            Options = {'k_events', 't_seconds, 'fixed_frames', 'between_frames'}
         """
         self.voxel_method = voxel_method
         if self.voxel_method['method'] == 'k_events':
@@ -358,6 +412,8 @@ class BaseVoxelDataset(Dataset):
     def get_event_indices(self, index):
         """
         Get start and end indices of events at index
+        @param Desired data index
+        @returns Start and end indices of events at index
         """
         idx0, idx1 = self.event_indices[index]
         if not (idx0 >= 0 and idx1 <= self.num_events):
@@ -367,14 +423,15 @@ class BaseVoxelDataset(Dataset):
     def get_voxel_grid(self, xs, ys, ts, ps, combined_voxel_channels=True):
         """
         Given events, return voxel grid
-        :param xs: tensor containg x coords of events
-        :param ys: tensor containg y coords of events
-        :param ts: tensor containg t coords of events
-        :param ps: tensor containg p coords of events
-        :param combined_voxel_channels: if True, create voxel grid merging positive and
+        @param xs tensor containg x coords of events
+        @param ys tensor containg y coords of events
+        @param ts tensor containg t coords of events
+        @param ps tensor containg p coords of events
+        @param combined_voxel_channels: if True, create voxel grid merging positive and
             negative events (resulting in NUM_BINS x H x W tensor). Otherwise, create
             voxel grid for positive and negative events separately
             (resulting in 2*NUM_BINS x H x W tensor)
+        @returns Voxel grid of input events
         """
         if combined_voxel_channels:
             # generate voxel grid which has size self.num_bins x H x W
@@ -390,6 +447,9 @@ class BaseVoxelDataset(Dataset):
     def transform_frame(self, frame, seed):
         """
         Augment frame and turn into tensor
+        @param frame Input frame
+        @param seed  Seed for random number generation
+        @returns Augmented frame
         """
         if self.return_format == "torch":
             frame = torch.from_numpy(frame).float().unsqueeze(0) / 255
@@ -401,6 +461,9 @@ class BaseVoxelDataset(Dataset):
     def transform_voxel(self, voxel, seed):
         """
         Augment voxel and turn into tensor
+        @param voxel Input voxel
+        @param seed  Seed for random number generation
+        @returns Augmented voxel
         """
         if self.vox_transform:
             random.seed(seed)
@@ -410,6 +473,9 @@ class BaseVoxelDataset(Dataset):
     def transform_flow(self, flow, seed):
         """
         Augment flow and turn into tensor
+        @param flow Input flow
+        @param seed  Seed for random number generation
+        @returns Augmented flow
         """
         if self.return_format == "torch":
             flow = torch.from_numpy(flow)  # should end up [2 x H x W]
@@ -419,14 +485,25 @@ class BaseVoxelDataset(Dataset):
         return flow
 
     def size(self):
+        """
+        Get the size of the event camera sensor/resolution
+        @returns Sensor resolution
+        """
         return self.sensor_resolution
 
     @staticmethod
     def unpackage_events(events):
+        """
+        Given events as 2D array, break it up into xs,ys,ts,ps components
+        @returns xs, ys, ts, ps component of events
+        """
         return events[:,0], events[:,1], events[:,2], events[:,3]
 
     @staticmethod
     def collate_fn(data, event_keys=['events'], idx_keys=['events_batch_indices']):
+        """
+        Custom collate function for pyTorch batching to allow batching events
+        """
         collated_events = {}
         events_arr = []
         end_idx = 0
