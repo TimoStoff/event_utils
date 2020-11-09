@@ -1,5 +1,6 @@
 import numpy as np
 import h5py
+from ..representations.image import events_to_image
 
 def infer_resolution(xs, ys):
     sr = [np.max(ys) + 1, np.max(xs) + 1]
@@ -12,6 +13,24 @@ def events_bounds_mask(xs, ys, x_min, x_max, y_min, y_max):
     mask = np.where(np.logical_or(xs<=x_min, xs>x_max), 0.0, 1.0)
     mask *= np.where(np.logical_or(ys<=y_min, ys>y_max), 0.0, 1.0)
     return mask
+
+def cut_events_to_lifespan(xs, ys, ts, ps, params,
+        pixel_crossings, minimum_events=100, side='back'):
+    magnitude = np.linalg.norm(params)
+    dt = pixel_crossings/magnitude
+    if side == 'back':
+        s_idx = np.searchsorted(ts, ts[-1]-dt)
+        num_events = len(xs)-s_idx
+        s_idx = len(xs)-minimum_events if num_events < minimum_events else s_idx
+        return xs[s_idx:-1], ys[s_idx:-1], ts[s_idx:-1], ps[s_idx:-1]
+    elif side == 'front':
+        s_idx = np.searchsorted(ts, dt+ts[0])
+        num_events = s_idx
+        s_idx = minimum_events if num_events < minimum_events else s_idx
+        return xs[0:s_idx], ys[0:s_idx], ts[0:s_idx], ps[0:s_idx]
+    else:
+        raise Exception("Invalid side given: {}. To cut events, must provide an \
+                appropriate side to cut from, either 'front' or 'back'".format(side))
 
 def clip_events_to_bounds(xs, ys, ts, ps, bounds, set_zero=False):
     """
@@ -82,3 +101,15 @@ def binary_search_torch_tensor(t, l, r, x, side='left'):
     if side == 'left':
         return l
     return r
+
+def remove_hot_pixels(xs, ys, ts, ps, sensor_size=(180, 240), num_hot=50):
+    img = events_to_image(xs, ys, ps, sensor_size=sensor_size)
+    hot = np.array([])
+    for i in range(num_hot):
+        maxc = np.unravel_index(np.argmax(img), sensor_size)
+        #print("{} = {}".format(maxc, img[maxc]))
+        img[maxc] = 0
+        h = np.where((xs == maxc[1]) & (ys == maxc[0]))
+        hot = np.concatenate((hot, h[0]))
+    xs, ys, ts, ps = np.delete(xs, hot), np.delete(ys, hot), np.delete(ts, hot), np.delete(ps, hot)
+    return xs, ys, ts, ps

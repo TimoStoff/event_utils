@@ -89,6 +89,17 @@ def format_power(size):
     return size, power_labels[n]
 
 def plot_image(image, lognorm=False, cmap='gray', bbox=None, ticks=False, norm=True, savename=None, colorbar=False):
+    """
+    Plot an image
+    :param image: The image to plot, as np array
+    :param lognorm: If true, apply log transform the normalize image
+    :param cmap: Colormap (defaul gray)
+    :param bbox: Optional bounding box to draw on image, as array with [[top corner x,y,w,h]]
+    :param ticks: Whether or not to draw axis ticks
+    :param norm: Normalize image?
+    :param savename: Optional save path
+    :param colorbar: Display color bar if true
+    """
     fig, ax = plt.subplots(1)
     if lognorm:
         image = np.log10(image)
@@ -97,9 +108,8 @@ def plot_image(image, lognorm=False, cmap='gray', bbox=None, ticks=False, norm=T
         image = cv.normalize(image, None, 0, 1.0, cv.NORM_MINMAX)
     ims = ax.imshow(image, cmap=cmap)
     if bbox is not None:
-        w = bbox[1][0]-bbox[0][0]
-        h = bbox[1][1]-bbox[0][1]
-        rect = patches.Rectangle((bbox[0]), w, h, linewidth=1, edgecolor='r', facecolor='none')
+        w,h = bbox[2], bbox[3]
+        rect = patches.Rectangle((bbox[0:2]), w, h, linewidth=1, edgecolor='r', facecolor='none')
         ax.add_patch(rect)
     if colorbar:
         fig.colorbar(ims)
@@ -109,7 +119,9 @@ def plot_image(image, lognorm=False, cmap='gray', bbox=None, ticks=False, norm=T
         plt.savefig(savename)
     plt.show()
 
-def plot_image_grid(images, grid_shape=None, lognorm=False, cmap='gray', bbox=None, norm=True, savename=None, colorbar=False):
+def plot_image_grid(images, grid_shape=None, lognorm=False,
+        cmap='gray', bbox=None, norm=True, savename=None,
+        colorbar=False):
     if grid_shape is None:
         grid_shape = [1, len(images)]
 

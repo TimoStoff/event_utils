@@ -2,7 +2,7 @@ import numpy as np
 from scipy.stats import rankdata
 import torch
 
-def events_to_image(xs, ys, ps, sensor_size=(180, 240), interpolation=None, padding=False):
+def events_to_image(xs, ys, ps, sensor_size=(180, 240), interpolation=None, padding=False, meanval=False, default=0):
     """
     Place events into an image using numpy
     :param xs: x coords of events
@@ -18,9 +18,11 @@ def events_to_image(xs, ys, ps, sensor_size=(180, 240), interpolation=None, padd
         xt, yt, pt = torch.from_numpy(xs), torch.from_numpy(ys), torch.from_numpy(ps)
         xt, yt, pt = xt.float(), yt.float(), pt.float()
         img = events_to_image_torch(xt, yt, pt, clip_out_of_range=True, interpolation='bilinear', padding=padding)
+        img[img==0] = default
         img = img.numpy()
         if meanval:
-            event_count_image = events_to_image_torch(xt, yt, torch.ones_like(xt))
+            event_count_image = events_to_image_torch(xt, yt, torch.ones_like(xt), 
+                    clip_out_of_range=True, padding=padding)
             event_count_image = event_count_image.numpy()
     else:
         coords = np.stack((ys, xs))
@@ -37,12 +39,12 @@ def events_to_image(xs, ys, ps, sensor_size=(180, 240), interpolation=None, padd
             event_count_image = np.bincount(abs_coords, weights=np.ones_like(xs), minlength=sensor_size[0]*sensor_size[1])
             event_count_image = event_count_image.reshape(sensor_size)
     if meanval:
-        img /= (event_count_image+1e-6)
+        img = np.divide(img, event_count_image, out=np.ones_like(img)*default, where=event_count_image!=0)
     return img
 
 def events_to_image_torch(xs, ys, ps,
         device=None, sensor_size=(180, 240), clip_out_of_range=True,
-        interpolation=None, padding=True):
+        interpolation=None, padding=True, default=0):
     """
     Method to turn event tensor to image. Allows for bilinear interpolation.
         :param xs: tensor of x coords of events
@@ -70,7 +72,7 @@ def events_to_image_torch(xs, ys, ps,
         clipy = img_size[0] if interpolation is None and padding==False else img_size[0]-1
         mask = torch.where(xs>=clipx, zero_v, ones_v)*torch.where(ys>=clipy, zero_v, ones_v)
 
-    img = torch.zeros(img_size).to(device)
+    img = (torch.ones(img_size)*default).to(device)
     if interpolation == 'bilinear' and xs.dtype is not torch.long and xs.dtype is not torch.long:
         pxs = (xs.floor()).float()
         pys = (ys.floor()).float()
@@ -86,6 +88,8 @@ def events_to_image_torch(xs, ys, ps,
         if ys.dtype is not torch.long:
             ys = ys.long().to(device)
         try:
+            mask = mask.long().to(device)
+            xs, ys = xs*mask, ys*mask
             img.index_put_((ys, xs), ps, accumulate=True)
         except Exception as e:
             print("Unable to put tensor {} positions ({}, {}) into {}. Range = {},{}".format(

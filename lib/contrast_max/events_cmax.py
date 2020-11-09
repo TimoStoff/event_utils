@@ -10,8 +10,6 @@ from ..util.util import plot_image, save_image, plot_image_grid
 from ..visualization.draw_event_stream import plot_events
 from .objectives import *
 from .warps import *
-from ..representations.image import events_to_timestamp_image
-import matplotlib.pyplot as plt
 
 def get_hsv_shifted():
     """
@@ -27,53 +25,9 @@ def get_hsv_shifted():
     hsv_shifted = LinearSegmentedColormap.from_list('hsv_shifted', hsv_shifted, N=100)
     return hsv_shifted
 
-def find_event_change(w_ori, w_dx, w_dy, mean, orig, dx, dy):
-    weight_ori = image_to_event_weights(w_ori[0], w_ori[1], orig)
-    weight_dx = image_to_event_weights(w_dx[0], w_dx[1], dx)
-    weight_dy = image_to_event_weights(w_dy[0], w_dy[1], dy)
-
-    d_ori_mean = np.abs(weight_ori-mean)
-    d_d_mean = np.abs(weight_dx-mean)
-
-    xs, ys = w_ori[0], w_ori[1]
-    img1 = events_to_image(xs, ys, d_ori_mean, interpolation='bilinear', meanval=True)
-
-    xs, ys = w_dx[0], w_dx[1]
-    img2 = events_to_image(xs, ys, d_d_mean, interpolation='bilinear', meanval=True)
-
-    hsv_shifted = get_hsv_shifted()
-    plot_image(img1, cmap=hsv_shifted, colorbar=True)
-    plot_image(img2, cmap=hsv_shifted, colorbar=True)
-
-    xs, ys = w_ori[0], w_ori[1]
-    diff = -(d_ori_mean-d_d_mean)
-    diff_img = events_to_image(xs, ys, diff, interpolation='bilinear')
-    plot_image(diff_img, cmap=hsv_shifted, colorbar=True)
-
-    pos = np.where(diff>0.1, 1, 0)
-    diff_img = events_to_image(xs, ys, pos, interpolation='bilinear')
-    plot_image(diff_img, cmap=hsv_shifted, colorbar=True)
-
-
-def seg_ts_image(xs, ys, ts, ps, sensor_size):
-    #Get the timestamp image
-    ts_img = events_to_timestamp_image(xs, ys, ts, ps, sensor_size=sensor_size, normalize_timestamps=False)
-    ts_img = (ts_img[0]+ts_img[1]).astype('float64')
-    #ts_img += ts[0]
-
-    #avg_ts = np.mean(ts)
-    #ts_rng = ts[-1]-ts[0]
-    #thresh = ts_rng*0.01
-    #print("rng={}, thresh={}".format(ts_rng, thresh))
-    #mask = np.where(np.abs(ts_img-avg_ts) < thresh, 1, 0)
-    #masked = ts_img*mask
-    #plot_image(masked, lognorm=False, cmap='viridis')
-    #print("img max={} img min={}, img mean={}".format(np.max(ts_img), np.min(ts_img), np.mean(ts_img)))
-    #print("img max={} img min={}, img mean={}".format(np.max(ts), np.min(ts), np.mean(ts)))
-    return ts_img
-
 def grid_cmax(xs, ys, ts, ps, roi_size=(20,20), step=None, warp=linvel_warp(),
-        obj=variance_objective(adaptive_lifespan=True, minimum_events=105)):
+        obj=variance_objective(adaptive_lifespan=True, minimum_events=105),
+        min_events=10):
     """
     Break sensor into a grid and perform contrast maximisation on each sector of grid
     separately.
@@ -85,6 +39,7 @@ def grid_cmax(xs, ys, ts, ps, roi_size=(20,20), step=None, warp=linvel_warp(),
     @param step The sliding window step size (same as roi_size if left empty)
     @param warp The warp function to be used
     @param The objective fuction to be used
+    @param The min number of events in a ROI to be considered valid
     @returns List of optimal parameters, optimal function evaluations and rois
     """
     step = roi_size if step is None else step
@@ -94,13 +49,10 @@ def grid_cmax(xs, ys, ts, ps, roi_size=(20,20), step=None, warp=linvel_warp(),
     results_params = []
     results_rois = []
     results_f_evals = []
-    samplenum = 0
-    print("Running grid search...")
-    for xc in range(80, resolution[1], step[1]):
+    for xc in range(0, resolution[1], step[1]):
         x_roi_idc = np.argwhere((xs>=xc) & (xs<xc+step[1]))[:, 0]
         y_subset = ys[x_roi_idc]
-        for yc in range(20, resolution[0], step[0]):
-            bbox = [(xc, yc), (xc+step[1], yc+step[0])]
+        for yc in range(0, resolution[0], step[0]):
             y_roi_idc = np.argwhere((y_subset>=yc) & (y_subset<yc+step[0]))[:, 0]
 
             roi_xs = xs[x_roi_idc][y_roi_idc]
@@ -108,91 +60,27 @@ def grid_cmax(xs, ys, ts, ps, roi_size=(20,20), step=None, warp=linvel_warp(),
             roi_ts = ts[x_roi_idc][y_roi_idc]
             roi_ps = ps[x_roi_idc][y_roi_idc]
 
-            if len(roi_xs) > 0:
-                #params = optimize(roi_xs, roi_ys, roi_ts, roi_ps, warp, obj, numeric_grads=False)
+            if len(roi_xs) > min_events:
                 obj = variance_objective(adaptive_lifespan=True, minimum_events=105)
-                print("OPTIMIZE using {} events".format(len(roi_xs)))
                 params = optimize_contrast(roi_xs, roi_ys, roi_ts, roi_ps, warp, obj, numeric_grads=False, blur_sigma=2.0, img_size=resolution, grid_search_init=True)
-                print("--- first cycle ---")
                 params = optimize_contrast(roi_xs, roi_ys, roi_ts, roi_ps, warp, obj, numeric_grads=False, blur_sigma=1.0, img_size=resolution, x0=params)
-                print("Final optimization param: {}".format(params))
-                print("===============")
-                #xsc, ysc, tsc, psc = cut_events_to_lifespan(xs, ys, ts, ps, params, 10, minimum_events=10)
-                xsc, ysc, tsc, psc = xs, ys, ts, ps
+                iwe, d_iwe = get_iwe(params, xs, ys, ts, ps, warp, resolution,
+                       use_polarity=True, compute_gradient=False, return_events=False)
+                f_eval = obj.evaluate_function(iwe=iwe)
 
-                #print the iwe and the diwe
-                iwe, d_iwe, (xw, ywe) = get_iwe(params, xsc, ysc, tsc, psc, warp, resolution,
-                       use_polarity=True, compute_gradient=True, return_events=True)
-                plot_image(iwe, bbox=[[xc,yc],[xc+step[1],yc+step[0]]], savename="/tmp/iwe_{}.jpg".format(0))
-                plot_image_grid([d_iwe[0], d_iwe[1]], norm=False, savename="/tmp/diwe_{}.jpg".format(0))
-
-                #Try mitrokhin timestamp thing
-                hsv_shifted = get_hsv_shifted()
-                xw1, yw1, jx, jy = warp.warp(xsc, ysc, tsc, psc, tsc[-1], params, compute_grad=False)
-                simg1=seg_ts_image(xw1, yw1, tsc, psc, resolution)
-
-                delta = 50
-                xw2, yw2, jx, jy = warp.warp(xsc, ysc, tsc, psc, tsc[-1], [params[0]+delta, params[1]], compute_grad=False)
-                simg2=seg_ts_image(xw2, yw2, tsc, psc, resolution)
-
-                xw3, yw3, jx, jy = warp.warp(xsc, ysc, tsc, psc, tsc[-1], [params[0], params[1]+delta], compute_grad=False)
-                simg3=seg_ts_image(xw3, yw3, tsc, psc, resolution)
-
-                plot_image_grid([simg1, simg2, simg3], lognorm=False, cmap=hsv_shifted, norm=True, colorbar=True)
-
-                normalized_ts = tsc-tsc[0]
-                mean_ts = np.mean(normalized_ts)
-                find_event_change([xw1, yw1], [xw2, yw2], [xw3, yw3], mean_ts, simg1, simg2, simg3)
-                return
-
-                for i in range(1, 100, 10):
-                    img1, d_iwe, (wx,wy), ew1 = get_iwe(params, xsc, ysc, tsc, psc, warp, resolution,
-                           use_polarity=True, return_per_event_contrast=True, return_events=True)
-                    img1 = events_to_image(wx, wy, psc, interpolation='bilinear', padding=True)
-                    plot_image(img1, savename="/tmp/img1_{}.jpg".format(i))
-                    ew1 = image_to_event_weights(wx, wy, img1)
-                    params2 = params + np.array([i, i])
-                    print(params2)
-                    img2, d_iwe, ew2 = get_iwe(params2, xsc, ysc, tsc, psc, warp, resolution,
-                           use_polarity=True, return_per_event_contrast=True)
-                    img3 = img1-img2
-                    dew = ew1-ew2
-
-                    dew_iwe, d_iwe = get_iwe(params2, xsc, ysc, tsc, dew, warp, resolution,
-                           use_polarity=True)
-                    re_iwe = events_to_image(wx, wy, ew1, interpolation='bilinear')
-                    plot_image(re_iwe, savename="/tmp/re_iwe_{}.jpg".format(i))
-
-                    plot_image_grid([img1, img2, img3], norm=False, savename="/tmp/img_comp{}.jpg".format(i))
-                    save_image(img3, fname="/tmp/img_{}.jpg".format(i))
-                    save_image(dew_iwe, fname="/tmp/dew_{}.jpg".format(i))
-
-
-
-                #seg_mask = gaussian_filter(segmentation_mask_from_d_iwe(d_iwe), 1.0)
-                seg_mask = segmentation_mask_from_d_iwe(d_iwe).astype(np.float)
-                plot_image(seg_mask)
-                seg_mask = gaussian_filter(seg_mask, sigma=1)
-
-                event_ind = get_events_from_mask(seg_mask, xw, yw)
-                print(event_ind.shape)
-                segx = xsc[event_ind[0:10000]]
-                segy = ysc[event_ind[0:10000]]
-                segt = tsc[event_ind[0:10000]]
-                segp = psc[event_ind[0:10000]]
-                img = [np.ones((180,240), dtype=np.float)]
-                img_ts = [segt[0]]
-                plot_events(240-segx, 180-segy, segt, segp, show_plot=True, num_show=-1, img_size=(180,240), num_compress=1000)
-                print(len(segx))
-
-                #save_image(iwe, fname="/tmp/vis/img_{:09d}.png".format(samplenum), bbox=[[xc,yc],[xc+step[1],yc+step[0]]])
-                samplenum += 1
                 results_params.append(params)
-                results_rois.append([yc, xc, yc+step[0], xc+step[1]])
+                results_rois.append([yc, xc, step[0], step[1]])
                 results_f_evals.append(obj.evaluate_function(iwe=iwe))
-    return results_params, results_f_evals, results_rois
+
+    return results_params, results_rois, results_f_evals
 
 def segmentation_mask_from_d_iwe(d_iwe, th=None):
+    """
+    Generate a segmentation mask from the derivative of the IWE wrt motion params
+    @param d_iwe First derivative of IWE wrt motion parameters
+    @param th Value threshold for segmentation mask, auto generated if left blank
+    @returns Segmentation mask
+    """
     th1 = np.percentile(np.abs(d_iwe), 90)
     validx = d_iwe[0].flatten()[np.argwhere(np.abs(d_iwe[0].flatten()) > th1).squeeze()]
     validy = d_iwe[1].flatten()[np.argwhere(np.abs(d_iwe[1].flatten()) > th1).squeeze()]
@@ -218,15 +106,17 @@ def draw_objective_function(xs, ys, ts, ps, objective=variance_objective(minimum
     """
     Draw the objective function given by sampling over a range. Depending on the value of resolution, this
     can involve many samples and take some time.
-    Parameters:
-        xs,ys,ts,ps (numpy array) The event components
-        objective (object) The objective function
-        warpfunc (object) The warp function
-        x_range, y_range (tuple) the range over which to plot the parameters
-        gt (tuple) The ground truth
-        show_gt (bool) Whether to draw the ground truth in
-        resolution (float) The resolution of the sampling
-        img_size (tuple) The image sensor size
+    @param xs x components of events as np array
+    @param ys y components of events as np array
+    @param ts t components of events as np array
+    @param ps p components of events as np array
+    @param objective (object) The objective function
+    @param warpfunc (object) The warp function
+    @param x_range, y_range (tuple) the range over which to plot the parameters
+    @param gt (tuple) The ground truth
+    @param show_gt (bool) Whether to draw the ground truth in
+    @param resolution (float) The resolution of the sampling
+    @param img_size (tuple) The image sensor size
     """
     width = x_range[1]-x_range[0]
     height = y_range[1]-y_range[0]
@@ -270,9 +160,13 @@ def draw_objective_function(xs, ys, ts, ps, objective=variance_objective(minimum
 
 def find_new_range(search_axes, param):
     """
-    Given a range of search parameters and a parameter, find
-    the new range that encompasses all unsearched domain around
-    the parameter
+    During grid search, we need to find a new search range once we have located
+    an optimal parameter. This function gives us a new search range for a given axis
+    of the search space, given a parameter value, such that all the unsearched domain around
+    that parameter is encompassed.
+    @param search_axes The previous set of samples along one axis of the search space
+    @param The current motion parameter
+    @returns The new parameter search range
     """
     magnitude = np.abs(param)
     nearest_idx = np.searchsorted(search_axes, param)
@@ -288,34 +182,36 @@ def find_new_range(search_axes, param):
     param_range = [param-d1, param+d2]
     return param_range
 
-def recursive_search(xs, ys, ts, ps, warp_function, objective_function, img_size, param_ranges=None,
+def grid_search_optimisation(xs, ys, ts, ps, warp_function, objective_function, img_size, param_ranges=None,
         log_scale=True, num_samples_per_param=5, depth=0, th0=1, max_iters=20):
     """
     Recursive grid-search optimization as per SOFAS. Searches a grid over a range
     and then searches a sub-grid, etc, until convergence.
 
-    :param: xs x components of events
-    :param: ys y components of events
-    :param: ts t components of events
-    :param: ps p components of events
-    :param: warp_function the warp function to use
-    :param: objective_function the objective function to use
-    :param: img_size the size of the event camera sensor
-    :param: param_ranges: a list of lists, where each list contains the search range for
-        the given warp function parameter. If None, the default is to search from -100 to 100 for
-        each parameter.
-    :param: log_scale if true, the sample points are drawn from a log scale. This means that
-        the parameter space is searched more frequently near the origin and less frequently at
-        the fringes.
-    :param: num_samples_per_param how many samples to take per parameter. The number of evaluations
-        this method needs to perform is equal to num_samples_per_param^warp_function.dims. Thus,
-        for high dimensional warp functions, it is advised to keep this value low. Must be greater
-        than 5 and odd.
-    :param: depth keeps track of the recursion depth
-    :param: th0 when the subgrid search radius is smaller than th0, convergence is reached.
-    :param: max_iters maximum number of iterations
+    @param xs x components of events as np array
+    @param ys y components of events as np array
+    @param ts t components of events as np array
+    @param ps p components of events as np array
+    @param warp_function The warp function to use
+    @param objective_function The objective function to use
+    @param img_size The size of the event camera sensor
+    @param param_ranges A list of lists, where each list contains the search range for
+       the given warp function parameter. If None, the default is to search from -100 to 100 for
+       each parameter.
+    @param log_scale If true, the sample points are drawn from a log scale. This means that
+       the parameter space is searched more frequently near the origin and less frequently at
+       the fringes.
+    @param num_samples_per_param How many samples to take per parameter. The number of evaluations
+       this method needs to perform is equal to num_samples_per_param^warp_function.dims. Thus,
+       for high dimensional warp functions, it is advised to keep this value low. Must be greater
+       than 5 and odd.
+    @param depth Keeps track of the recursion depth
+    @param th0 When the subgrid search radius is smaller than th0, convergence is reached.
+    @param max_iters Maximum number of iterations
+    @returns The optimal parameter
     """
     assert num_samples_per_param%2==1 and num_samples_per_param>=5
+
     optimal = grid_search_initial(xs, ys, ts, ps, warp_function, copy.deepcopy(objective_function),
             img_size, param_ranges=param_ranges, log_scale=log_scale,
             num_samples_per_param=num_samples_per_param)
@@ -323,17 +219,17 @@ def recursive_search(xs, ys, ts, ps, warp_function, objective_function, img_size
     params = optimal["min_params"]
     new_param_ranges = []
     max_range = 0
+    # Iterate over each search axis and each element of the 
+    # optimal parameter to find new search range
     for sa, param in zip(optimal["search_axes"], params):
         new_range = find_new_range(sa, param)
         new_param_ranges.append(new_range)
         max_range = np.abs(new_range[1]-new_range[0]) if np.abs(new_range[1]-new_range[0]) > max_range else max_range
-    #print("--- Depth={}, range={} ---".format(depth, max_range))
     if max_range >= th0 and depth < max_iters:
         return recursive_search(xs,ys,ts,ps,warp_function,objective_function,img_size,
                 param_ranges=new_param_ranges, log_scale=log_scale,
                 num_samples_per_param=num_samples_per_param, depth=depth+1)
     else:
-        #print("SOFAS search: {}".format(optimal["min_params"]))
         return optimal
 
 
@@ -341,23 +237,33 @@ def recursive_search(xs, ys, ts, ps, warp_function, objective_function, img_size
 def grid_search_initial(xs, ys, ts, ps, warp_function, objective_function, img_size, param_ranges=None,
         log_scale=True, num_samples_per_param=5):
     """
-    Perform a grid search for a good starting candidate.
-    :param: xs x components of events
-    :param: ys y components of events
-    :param: ts t components of events
-    :param: ps p components of events
-    :param: warp_function the warp function to use
-    :param: objective_function the objective function to use
-    :param: img_size the size of the event camera sensor
-    :param: param_ranges: a list of lists, where each list contains the search range for
-        the given warp function parameter. If None, the default is to search from -100 to 100 for
-        each parameter.
-    :param: log_scale if true, the sample points are drawn from a log scale. This means that
-        the parameter space is searched more frequently near the origin and less frequently at
-        the fringes.
-    :param: num_samples_per_param how many samples to take per parameter. The number of evaluations
-        this method needs to perform is equal to num_samples_per_param^warp_function.dims. Thus,
-        for high dimensional warp functions, it is advised to keep this value low.
+    Recursive grid-search optimization as per SOFAS. Searches a grid over a range
+    and then searches a sub-grid, etc, until convergence.
+
+    @param xs x components of events as np array
+    @param ys y components of events as np array
+    @param ts t components of events as np array
+    @param ps p components of events as np array
+    @param warp_function The warp function to use
+    @param objective_function The objective function to use
+    @param img_size The size of the event camera sensor
+    @param param_ranges A list of lists, where each list contains the search range for
+       the given warp function parameter. If None, the default is to search from -100 to 100 for
+       each parameter.
+    @param log_scale If true, the sample points are drawn from a log scale. This means that
+       the parameter space is searched more frequently near the origin and less frequently at
+       the fringes.
+    @param num_samples_per_param How many samples to take per parameter. The number of evaluations
+       this method needs to perform is equal to num_samples_per_param^warp_function.dims. Thus,
+       for high dimensional warp functions, it is advised to keep this value low. Must be greater
+       than 5 and odd.
+    @param depth Keeps track of the recursion depth
+    @param th0 When the subgrid search radius is smaller than th0, convergence is reached.
+    @param max_iters Maximum number of iterations
+    @returns optimal is a dict with keys 'params' (the list of sampling coordinates used),
+        'eval' (the evaluation at each sample coordinate), 'search_axes' (the sample coordinates on each parameter axis),
+        'min_params' (the best parameter, minimsing the optimisation problem) and 'min_func_eval' (the function value at
+        the best parameter).
     """
     assert num_samples_per_param%2 == 1
 
@@ -368,14 +274,11 @@ def grid_search_initial(xs, ys, ts, ps, warp_function, objective_function, img_s
     else:
         scale = np.linspace(0, 1.0, int(num_samples_per_param/2.0)+1)[1:]
 
+    # If the parameter ranges are empty, intialise them
     if param_ranges is None:
         param_ranges = []
         for i in range(warp_function.dims):
             param_ranges.append([-150, 150])
-
-    #draw_objective_function(xs, ys, ts, ps, variance_objective(), linvel_warp(), x_range=param_ranges[0], y_range=param_ranges[1], show_gt=False, resolution=2)
-    #old_xlim = plt.xlim()
-    #old_ylim = plt.ylim()
 
     axes = []
     for param_range in param_ranges:
@@ -392,65 +295,46 @@ def grid_search_initial(xs, ys, ts, ps, warp_function, objective_function, img_s
     best_eval = 0
     best_params = None
 
-    #xpts, ypts = [], []
     for params in zip(*coords):
         f_eval = objective_function.evaluate_function(params=params, xs=xs, ys=ys, ts=ts, ps=ps,
                 warpfunc=warp_function, img_size=img_size, blur_sigma=1.0)
-        #xpts.append(params[0])
-        #ypts.append(params[1])
-        #print("{}: {}".format(params, f_eval))
         output["params"].append(params)
         output["eval"].append(f_eval)
         if f_eval < best_eval:
             best_eval = f_eval
             best_params = params
 
-    #xpts = (xpts-min(xpts))/(max(xpts)-min(xpts))*(old_xlim[1]-old_xlim[0])+old_xlim[0]
-    #ypts = (ypts-min(ypts))/(max(ypts)-min(ypts))*(old_ylim[0]-old_ylim[1])+old_ylim[1]
-    #plt.xlim(old_xlim)
-    #plt.ylim(old_ylim)
-    #plt.scatter(xpts, ypts, c='r', marker='x')
-    #plt.show()
-
     output["min_params"] = best_params
     output["min_func_eval"] = best_eval
-    #print("min @ {}: {}".format(best_params, best_eval))
     return output
 
 def optimize_contrast(xs, ys, ts, ps, warp_function, objective, optimizer=opt.fmin_bfgs, x0=None,
         numeric_grads=False, blur_sigma=None, img_size=(180, 240), grid_search_init=False, minimum_events=200):
     """
-    Optimize contrast for a set of events
-    Parameters:
-    xs (numpy float array) The x components of the events
-    ys (numpy float array) The y components of the events
-    ts (numpy float array) The timestamps of the events. Timestamps should be ts-t[0] to avoid precision issues.
-    ps (numpy float array) The polarities of the events
-    warp_function (function) The function with which to warp the events
-    objective (objective class object) The objective to optimize
-    optimizer (function) The optimizer to use
-    x0 (np array) The initial guess for optimization
-    numeric_grads (bool) If true, use numeric derivatives, otherwise use analytic drivatives if available.
+    Optimize contrast for a set of events using gradient based optimiser
+    @param xs x components of events as np array
+    @param ys y components of events as np array
+    @param ts t components of events as np array
+    @param ps p components of events as np array
+    @param warp_function (function) The function with which to warp the events
+    @param objective (objective class object) The objective to optimize
+    @param optimizer (function) The optimizer to use
+    @param x0 (np array) The initial guess for optimization
+    @param numeric_grads (bool) If true, use numeric derivatives, otherwise use analytic drivatives if available.
         Numeric grads tend to be more stable as they are a little less prone to noise and don't require as much
         tuning on the blurring parameter. However, they do make optimization slower.
-    img_size (tuple) The size of the event camera sensor
-    blur_sigma (float) Size of the blurring kernel. Blurring the images of warped events can
+    @param img_size (tuple) The size of the event camera sensor
+    @param blur_sigma (float) Size of the blurring kernel. Blurring the images of warped events can
         have a large impact on the convergence of the optimization.
-
-    Returns:
-        The max arguments for the warp parameters wrt the objective
+    @returns The max arguments for the warp parameters wrt the objective
     """
     if grid_search_init and x0 is None:
-        print("-----------")
         init_obj = copy.deepcopy(objective)
         init_obj.adaptive_lifespan = False
         minv = recursive_search(xs, ys, ts, ps, warp_function, init_obj, img_size, log_scale=False)
-        #xs, ys, ts, ps = cut_events_to_lifespan(xs, ys, ts, ps, minv["min_params"], 5, minimum_events=minimum_events)
-        #minv = grid_search_initial(xs, ys, ts, ps, warp_function, objective, img_size, log_scale=False)
         x0 = minv["min_params"]
     elif x0 is None:
         x0 = np.array([0,0])
-    print("Using {} events, x0 = {}".format(len(xs), x0))
     objective.iter_update(x0)
     args = (xs, ys, ts, ps, warp_function, img_size, blur_sigma)
     if numeric_grads:
@@ -461,22 +345,21 @@ def optimize_contrast(xs, ys, ts, ps, warp_function, objective, optimizer=opt.fm
 
 def optimize(xs, ys, ts, ps, warp, obj, numeric_grads=True, img_size=(180, 240)):
     """
-    Optimize contrast for a set of events. Uses optimize_contrast() for the optimiziation, but allows
+    Optimize contrast for a set of events using gradient based optimiser.
+    Uses optimize_contrast() for the optimiziation, but allows
     blurring schedules for successive optimization iterations.
     Parameters:
-    xs (numpy float array) The x components of the events
-    ys (numpy float array) The y components of the events
-    ts (numpy float array) The timestamps of the events. Timestamps should be ts-t[0] to avoid precision issues.
-    ps (numpy float array) The polarities of the events
-    warp (function) The function with which to warp the events
-    obj (objective class object) The objective to optimize
-    numeric_grads (bool) If true, use numeric derivatives, otherwise use analytic drivatives if available.
+    @param xs x components of events as np array
+    @param ys y components of events as np array
+    @param ts t components of events as np array
+    @param ps p components of events as np array
+    @params warp (function) The function with which to warp the events
+    @params obj (objective class object) The objective to optimize
+    @params numeric_grads (bool) If true, use numeric derivatives, otherwise use analytic drivatives if available.
         Numeric grads tend to be more stable as they are a little less prone to noise and don't require as much
         tuning on the blurring parameter. However, they do make optimization slower.
-    img_size (tuple) The size of the event camera sensor
-
-    Returns:
-        The max arguments for the warp parameters wrt the objective
+    @params img_size (tuple) The size of the event camera sensor
+    @returns The max arguments for the warp parameters wrt the objective
     """
     numeric_grads = numeric_grads if obj.has_derivative else True
     argmax_an = optimize_contrast(xs, ys, ts, ps, warp, obj, numeric_grads=numeric_grads, blur_sigma=1.0, img_size=img_size)
@@ -485,20 +368,17 @@ def optimize(xs, ys, ts, ps, warp, obj, numeric_grads=True, img_size=(180, 240))
 def optimize_r2(xs, ys, ts, ps, warp, obj, numeric_grads=True, img_size=(180, 240)):
     """
     Optimize contrast for a set of events, finishing with SoE loss.
-    Parameters:
-    xs (numpy float array) The x components of the events
-    ys (numpy float array) The y components of the events
-    ts (numpy float array) The timestamps of the events. Timestamps should be ts-t[0] to avoid precision issues.
-    ps (numpy float array) The polarities of the events
-    warp (function) The function with which to warp the events
-    obj (objective class object) The objective to optimize
-    numeric_grads (bool) If true, use numeric derivatives, otherwise use analytic drivatives if available.
+    @param xs x components of events as np array
+    @param ys y components of events as np array
+    @param ts t components of events as np array
+    @param ps p components of events as np array
+    @param warp (function) The function with which to warp the events
+    @param obj (objective class object) The objective to optimize
+    @param numeric_grads (bool) If true, use numeric derivatives, otherwise use analytic drivatives if available.
         Numeric grads tend to be more stable as they are a little less prone to noise and don't require as much
         tuning on the blurring parameter. However, they do make optimization slower.
-    img_size (tuple) The size of the event camera sensor
-
-    Returns:
-        The max arguments for the warp parameters wrt the objective
+    @param img_size (tuple) The size of the event camera sensor
+    @returns The max arguments for the warp parameters wrt the objective
     """
     soe_obj = soe_objective()
     numeric_grads = numeric_grads if obj.has_derivative else True
