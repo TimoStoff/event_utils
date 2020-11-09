@@ -66,6 +66,21 @@ def clip_events_to_bounds(xs, ys, ts, ps, bounds, set_zero=False):
         ps_clip = None if ps is None else ps[x_clip_idc][y_clip_idc]
         return xs_clip, ys_clip, ts_clip, ps_clip
 
+def get_events_from_mask(mask, xs, ys):
+    """
+    Given an image mask, return the indices of all events at each location in the mask
+    @params mask The image mask
+    @param xs x components of events as list
+    @param ys y components of events as list
+    @returns Indices of events that lie on the mask
+    """
+    xs = xs.astype(int)
+    ys = ys.astype(int)
+    idx = np.stack((ys, xs))
+    event_vals = mask[tuple(idx)]
+    event_indices = np.argwhere(event_vals >= 0.01).squeeze()
+    return event_indices
+
 def binary_search_h5_dset(dset, x, l=None, r=None, side='left'):
     l = 0 if l is None else l
     r = len(dset)-1 if r is None else r

@@ -8,10 +8,29 @@ from ..util.util import plot_image
 import cv2 as cv
 
 class objective_function(ABC):
-
+"""
+Parent class for all objective functions for contrast maximisation
+"""
     def __init__(self, name="template", use_polarity=True,
             has_derivative=True, default_blur=1.0, adaptive_lifespan=False,
             pixel_crossings=5, minimum_events=10000):
+        """
+        Constructor, sets member variables.
+        @param name Sets the name of the objective function (eg: 'variance')
+        @param use_polarity If true, use the polarity of the events in generating IWEs 
+        @param has_derivative If true, this function has a defined analytical derivative.
+            Else, will use numerically estimated derivatives.
+        @param default_blur Sets the default standard deviation for the Gaussian blurring kernel
+        @param adaptive_lifespan Many implementations of contrast maximisation use assumptions of
+            linear motion wrt the chosen motion model. A given estimate of the motion parameters
+            implies a lifespan of the events. If 'adaptive_lifespan' is True, the number of events
+            used during warping is cut to that lifespan for each optimisation step, computed using
+            'pixel_crossings'. EG If motion model is optic flow velocity and the
+            estimate = 12 pixels/second and 'pixel_crossings'=3, then the lifespan will
+            be 3/12=0.25 seconds.
+        @param pixel_crossings Number of pixel crossings used to calculate 'adaptive_lifespan'
+        @param minimum_events The minimal number of events that 'adaptive_lifespan' will cut to
+        """
         self.name = name
         self.use_polarity = use_polarity
         self.has_derivative = has_derivative
@@ -30,8 +49,20 @@ class objective_function(ABC):
     def evaluate_function(self, params=None, xs=None, ys=None, ts=None, ps=None,
             warpfunc=None, img_size=None, blur_sigma=None, showimg=False, iwe=None):
         """
-        Define the warp function. Either give the params and the events or give a
-        precomputed iwe (if xs, ys, ts, ps are given, iwe is not necessary).
+        Define the warp function. The function can either receive events and motion
+        paramters as input, to compute the IWE and evaluate the objective function,
+        or receive a precomputed IWE. An example is given in comments.
+        @param params The motion parameters to evaluate at
+        @param xs x components of events as list
+        @param ys y components of events as list
+        @param ts t components of events as list
+        @param ps p components of events as list
+        @param warpfunc The desired warping function
+        @param img_size The size of the image sensor/resolution
+        @param blur_sigma The desired amount of blurring to apply to IWE
+        @param show_img Debugging tool, if true, show the IWE in a matplotlib window
+        @param iwe Precomputed IWE to evalute the objective function for
+        @returns Evaluation of objective function at parameters 'params'
         """
         #if iwe is None:
         #    iwe, d_iwe = get_iwe(params, xs, ys, ts, ps, warpfunc, img_size,
@@ -47,9 +78,23 @@ class objective_function(ABC):
     def evaluate_gradient(self, params=None, xs=None, ys=None, ts=None, ps=None,
             warpfunc=None, img_size=None, blur_sigma=None, showimg=False, iwe=None, d_iwe=None):
         """
-        If your warp function has it, define the gradient (otherwise set has_derivative to False
-        and numeric grads will be used). Either give the params and the events or give a
-        precomputed iwe and d_iwe (if xs, ys, ts, ps are given, iwe, d_iwe is not necessary).
+        Define the gradient of the warp function, if available (else numeric gradient
+        will be computed). The function can either receive events and motion
+        paramters as input, to compute the IWE and dIWE/dParams and evaluate the objective function,
+        or receive a precomputed IWE and dIWE/dParams. An example is given in comments.
+        @param params The motion parameters to evaluate at
+        @param xs x components of events as list
+        @param ys y components of events as list
+        @param ts t components of events as list
+        @param ps p components of events as list
+        @param warpfunc The desired warping function
+        @param img_size The size of the image sensor/resolution
+        @param blur_sigma The desired amount of blurring to apply to IWE
+        @param show_img Debugging tool, if true, show the IWE in a matplotlib window
+        @param iwe Precomputed IWE to evalute the objective function for
+        @param iwe Precomputed gradient of IWE wrt motion params to evalute the gradient
+            of the objective function
+        @returns Gradient of objective function wrt motion parameters at 'params'
         """
         #if iwe is None or d_iwe is None:
         #    iwe, d_iwe = get_iwe(params, xs, ys, ts, ps, warpfunc, img_size,
@@ -66,6 +111,12 @@ class objective_function(ABC):
         pass
 
     def iter_update(self, params, pixel_crossings=None):
+        """
+        Housekeeping function that runs as a callback at each optimisation step
+        if 'adaptive_lifespan' is set True
+        @param The current motion parameters
+        @param The number of pixel crossings to compute the new lifespan
+        """
         pixel_crossings = self.pixel_crossings if pixel_crossings is None else pixel_crossings
         magnitude = np.linalg.norm(params)
         if magnitude == 0:
@@ -74,9 +125,12 @@ class objective_function(ABC):
             dt = pixel_crossings/magnitude
         self.lifespan = dt
         self.recompute_lifespan = True
-        print("Callback: {}".format(dt))
 
     def update_lifespan(self, ts):
+        """
+        Set the new lifespan and thus the new set of events to be used in optimisation
+        @param ts The timestamps of the events currently used
+        """
         print("update lifespan")
         if self.adaptive_lifespan:
             self.s_idx = np.searchsorted(ts, ts[-1]-self.lifespan)
@@ -86,13 +140,20 @@ class objective_function(ABC):
             self.num_events = len(ts)-self.s_idx
 
 
-#def find_lifespan(ts, params, pixel_crossings):
-#    magnitude = np.linalg.norm(params)
-#    dt = pixel_crossings/magnitude
-#    s_idx = np.searchsorted(ts, ts[-1]-dt)
-#    return dt, s_idx
-#
 def cut_events_to_lifespan(xs, ys, ts, ps, params, pixel_crossings, minimum_events=10000):
+    """
+    Given events, cut the events down to the lifespan defined by the motion parameters
+    and desired pixel crossings
+    @param xs x components of events as list
+    @param ys y components of events as list
+    @param ts t components of events as list
+    @param ps p components of events as list
+    @param params The motion parameters to evaluate at
+    @param pixel_crossings Number of pixel crossings used to calculate new lifespan
+    @param minimum_events The minimal number of events that the output set of
+        events will contain
+    @returns The set of events cut to the new lifespan*desired pixel crossings
+    """
     magnitude = np.linalg.norm(params)
     dt = pixel_crossings/magnitude
     s_idx = np.searchsorted(ts, ts[-1]-dt)
@@ -106,6 +167,19 @@ def get_iwe(params, xs, ys, ts, ps, warpfunc, img_size, compute_gradient=False,
     """
     Given a set of parameters, events and warp function, get the warped image and derivative image
     if required.
+    @param params The motion parameters to evaluate at
+    @param xs x components of events as list
+    @param ys y components of events as list
+    @param ts t components of events as list
+    @param ps p components of events as list
+    @param warpfunc The desired warping function
+    @param img_size The size of the image sensor/resolution
+    @param compute_gradient If True, compute and return the gradient of the IWE wrt motion params
+    @param use_polarity If True, use the polarity of the events in IWE formation
+    @param return_events If True, return the warped events as well
+    @param return_per_event_contrast If True, return the contrast in the IWE at
+        each warped event's location
+    @returns IWE, dIWE/dParams, warped events, local contrast of each event in IWE
     """
     if not use_polarity:
         ps = np.abs(ps)
@@ -124,18 +198,6 @@ def get_iwe(params, xs, ys, ts, ps, warpfunc, img_size, compute_gradient=False,
         returnval.append(weights)
     return tuple(returnval)
 
-def get_events_from_mask(mask, xs, ys):
-    #pxs = np.floor(xs).astype(int)
-    #pys = np.floor(ys).astype(int)
-
-    #idx = np.stack((pys, pxs))
-    #event_vals = (mask[tuple(np.stack((pys, pxs)))] + mask[tuple(np.stack((pys, pxs+1)))] + mask[tuple(np.stack((pys+1, pxs)))] + mask[tuple(np.stack((pys+1, pxs+1)))])/4
-    xs = xs.astype(int)
-    ys = ys.astype(int)
-    idx = np.stack((ys, xs))
-    event_vals = mask[tuple(idx)]
-    event_indices = np.argwhere(event_vals >= 0.01).squeeze()
-    return event_indices
 
 class variance_objective(objective_function):
     """

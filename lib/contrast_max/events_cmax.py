@@ -5,7 +5,7 @@ import scipy.optimize as opt
 from scipy.ndimage.filters import gaussian_filter
 import torch
 import copy
-from ..util.event_util import infer_resolution
+from ..util.event_util import infer_resolution, get_events_from_mask
 from ..util.util import plot_image, save_image, plot_image_grid
 from ..visualization.draw_event_stream import plot_events
 from .objectives import *
@@ -30,7 +30,8 @@ def grid_cmax(xs, ys, ts, ps, roi_size=(20,20), step=None, warp=linvel_warp(),
         min_events=10):
     """
     Break sensor into a grid and perform contrast maximisation on each sector of grid
-    separately.
+    separately. Main input parameters are the events and the size of each window of the
+    grid (roi_size)
     @param xs x components of events as list
     @param ys y components of events as list
     @param ts t components of events as list
@@ -185,8 +186,11 @@ def find_new_range(search_axes, param):
 def grid_search_optimisation(xs, ys, ts, ps, warp_function, objective_function, img_size, param_ranges=None,
         log_scale=True, num_samples_per_param=5, depth=0, th0=1, max_iters=20):
     """
-    Recursive grid-search optimization as per SOFAS. Searches a grid over a range
-    and then searches a sub-grid, etc, until convergence.
+    Recursive grid-search optimization as per SOFAS. For each axis of the parameter space, samples that
+    space evenly. Having found the best point in the space, resamples the region surrounding that point,
+    expanding the range if necessary. Continues to do this until convergence (search space is smaller than
+    th0) or until iterations exceed max_iters. Can select to logarithmically sample the search space (ie
+    samples are taken more densely near the origin).
 
     @param xs x components of events as np array
     @param ys y components of events as np array
@@ -237,8 +241,9 @@ def grid_search_optimisation(xs, ys, ts, ps, warp_function, objective_function, 
 def grid_search_initial(xs, ys, ts, ps, warp_function, objective_function, img_size, param_ranges=None,
         log_scale=True, num_samples_per_param=5):
     """
-    Recursive grid-search optimization as per SOFAS. Searches a grid over a range
-    and then searches a sub-grid, etc, until convergence.
+    Recursive grid-search optimization as per SOFAS. Given a set of ranges for each parametrisation axis,
+    searches that range at evenly sampled points. Can also use a logarithmically sampled space (samples are
+    denser near the origin) if desired.
 
     @param xs x components of events as np array
     @param ys y components of events as np array
@@ -257,9 +262,6 @@ def grid_search_initial(xs, ys, ts, ps, warp_function, objective_function, img_s
        this method needs to perform is equal to num_samples_per_param^warp_function.dims. Thus,
        for high dimensional warp functions, it is advised to keep this value low. Must be greater
        than 5 and odd.
-    @param depth Keeps track of the recursion depth
-    @param th0 When the subgrid search radius is smaller than th0, convergence is reached.
-    @param max_iters Maximum number of iterations
     @returns optimal is a dict with keys 'params' (the list of sampling coordinates used),
         'eval' (the evaluation at each sample coordinate), 'search_axes' (the sample coordinates on each parameter axis),
         'min_params' (the best parameter, minimsing the optimisation problem) and 'min_func_eval' (the function value at
