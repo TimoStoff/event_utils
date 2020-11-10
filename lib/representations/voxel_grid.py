@@ -146,8 +146,8 @@ def events_to_voxel_torch(xs, ys, ts, ps, B, device=None, sensor_size=(180, 240)
         else:
             tstart = t[0] + dt*bi
             tend = tstart + dt
-            beg = binary_search_torch_tensor(t, 0, len(ts)-1, tstart) 
-            end = binary_search_torch_tensor(t, 0, len(ts)-1, tend) 
+            beg = binary_search_torch_tensor(t, 0, len(ts)-1, tstart)
+            end = binary_search_torch_tensor(t, 0, len(ts)-1, tend)
             vb = events_to_image_torch(xs[beg:end], ys[beg:end],
                     ps[beg:end], device, sensor_size=sensor_size,
                     clip_out_of_range=False)

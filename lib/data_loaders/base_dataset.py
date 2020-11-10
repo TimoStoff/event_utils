@@ -56,7 +56,7 @@ class BaseVoxelDataset(Dataset):
             A sliding window width must be given for k_events and t_seconds,
             which determines overlap (no overlap if set to 0). Eg:
             method={'method':'k_events', 'k':10000, 'sliding_window_w':100}
-            method={'method':'t_events', 't':0.5, 'sliding_window_t':0.1}
+            method={'method':'t_seconds', 't':0.5, 'sliding_window_t':0.1}
             method={'method':'between_frames'}
             method={'method':'fixed_frames', 'num_frames':100}
             Default is 'between_frames'.
@@ -125,14 +125,16 @@ class BaseVoxelDataset(Dataset):
         @param num_bins The number of bins desired in the voxel grid
         @param voxel_method Which method should be used to form the voxels.
             Currently supports:
-            * "k_events" (new voxels are formed every k events)
-            * "t_seconds" (new voxels are formed every t seconds)
+            * "k_events" (new voxels are formed every k events, with each batch
+                overlapping by 'sliding_window_w' events)
+            * "t_seconds" (new voxels are formed every t seconds, with each batch
+                overlapping by 'sliding_window_t' seconds)
             * "between_frames" (all events between frames are taken, requires frames to exist)
             * "fixed_frames" ('num_frames' voxels formed at even intervals)
             A sliding window width must be given for k_events and t_seconds,
             which determines overlap (no overlap if set to 0). Eg:
             method={'method':'k_events', 'k':10000, 'sliding_window_w':100}
-            method={'method':'t_events', 't':0.5, 'sliding_window_t':0.1}
+            method={'method':'t_seconds', 't':0.5, 'sliding_window_t':0.1}
             method={'method':'between_frames'}
             method={'method':'fixed_frames', 'num_frames':100}
             Default is 'between_frames'.
@@ -333,7 +335,7 @@ class BaseVoxelDataset(Dataset):
 
     def compute_timeblock_indices(self):
         """
-        For each block of time (using t_events), find the start and
+        For each block of time (using t_seconds), find the start and
         end indices of the corresponding events
         @returns List of indices of events at beginning and end of each block of time
         """
