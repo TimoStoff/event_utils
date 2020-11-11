@@ -5,13 +5,14 @@ import torch
 def events_to_image(xs, ys, ps, sensor_size=(180, 240), interpolation=None, padding=False, meanval=False, default=0):
     """
     Place events into an image using numpy
-    :param xs: x coords of events
-    :param ys: y coords of events
-    :param ps: event polarities/weights
-    :param sensor_size: the size of the event camera sensor
-    :param interpolation: whether to add the events to the pixels by interpolation (values: None, 'bilinear')
-    :param padding: If true, pad the output image to include events otherwise warped off sensor
-    :param meanval: If true, divide the sum of the values by the number of events at that location
+    @param xs x coords of events
+    @param ys y coords of events
+    @param ps Event polarities/weights
+    @param sensor_size The size of the event camera sensor
+    @param interpolation Whether to add the events to the pixels by interpolation (values: None, 'bilinear')
+    @param padding If true, pad the output image to include events otherwise warped off sensor
+    @param meanval If true, divide the sum of the values by the number of events at that location
+    @returns Event image from the input events
     """
     img_size = sensor_size
     if interpolation == 'bilinear' and xs.dtype is not torch.long and xs.dtype is not torch.long:
@@ -47,15 +48,16 @@ def events_to_image_torch(xs, ys, ps,
         interpolation=None, padding=True, default=0):
     """
     Method to turn event tensor to image. Allows for bilinear interpolation.
-        :param xs: tensor of x coords of events
-        :param ys: tensor of y coords of events
-        :param ps: tensor of event polarities/weights
-        :param device: the device on which the image is. If none, set to events device
-        :param sensor_size: the size of the image sensor/output image
-        :param clip_out_of_range: if the events go beyond the desired image size,
-            clip the events to fit into the image
-        :param interpolation: which interpolation to use. Options=None,'bilinear'
-        :param padding if bilinear interpolation, allow padding the image by 1 to allow events to fit:
+    @param xs Tensor of x coords of events
+    @param ys Tensor of y coords of events
+    @param ps Tensor of event polarities/weights
+    @param device The device on which the image is. If none, set to events device
+    @param sensor_size The size of the image sensor/output image
+    @param clip_out_of_range If the events go beyond the desired image size,
+       clip the events to fit into the image
+    @param interpolation Which interpolation to use. Options=None,'bilinear'
+    @param padding If bilinear interpolation, allow padding the image by 1 to allow events to fit:
+    @returns Event image from the events
     """
     if device is None:
         device = xs.device
@@ -100,6 +102,11 @@ def events_to_image_torch(xs, ys, ps,
 def interpolate_to_image(pxs, pys, dxs, dys, weights, img):
     """
     Accumulate x and y coords to an image using bilinear interpolation
+    @param pxs Numpy array of integer typecast x coords of events
+    @param pys Numpy array of integer typecast y coords of events
+    @param dxs Numpy array of residual difference between x coord and int(x coord)
+    @param dys Numpy array of residual difference between y coord and int(y coord)
+    @returns Image
     """
     img.index_put_((pys,   pxs  ), weights*(1.0-dxs)*(1.0-dys), accumulate=True)
     img.index_put_((pys,   pxs+1), weights*dxs*(1.0-dys), accumulate=True)
@@ -109,18 +116,33 @@ def interpolate_to_image(pxs, pys, dxs, dys, weights, img):
 
 def interpolate_to_derivative_img(pxs, pys, dxs, dys, d_img, w1, w2):
     """
-    Accumulate x and y coords to an image using double weighted bilinear interpolation
+    Accumulate x and y coords to an image using double weighted bilinear interpolation.
+    This allows for computing gradient images, since in the gradient image the interpolation
+    is weighted by the values of the Jacobian.
+    @param pxs Numpy array of integer typecast x coords of events
+    @param pys Numpy array of integer typecast y coords of events
+    @param dxs Numpy array of residual difference between x coord and int(x coord)
+    @param dys Numpy array of residual difference between y coord and int(y coord)
+    @param dimg Derivative image (needs to be of appropriate dimensions)
+    @param w1 Weight for x component of bilinear interpolation
+    @param w2 Weight for y component of bilinear interpolation
+    @returns Image
     """
     for i in range(d_img.shape[0]):
         d_img[i].index_put_((pys,   pxs  ), w1[i] * (-(1.0-dys)) + w2[i] * (-(1.0-dxs)), accumulate=True)
         d_img[i].index_put_((pys,   pxs+1), w1[i] * (1.0-dys)    + w2[i] * (-dxs), accumulate=True)
         d_img[i].index_put_((pys+1, pxs  ), w1[i] * (-dys)       + w2[i] * (1.0-dxs), accumulate=True)
         d_img[i].index_put_((pys+1, pxs+1), w1[i] * dys          + w2[i] *  dxs, accumulate=True)
+    return d_img
 
 def image_to_event_weights(xs, ys, img):
     """
     Given an image and a set of event coordinates, get the pixel value
-    of the image for each event using bilinear interpolation
+    of the image for each event using reverse bilinear interpolation
+    @param xs x coords of events
+    @param ys y coords of events
+    @param img The image from which to draw the weights
+    @return List containing the value in the image for each event
     """
     clipx, clipy  = img.shape[1]-1, img.shape[0]-1
     mask = np.where(xs>=clipx, 0, 1)*np.where(ys>=clipy, 0, 1)
@@ -141,16 +163,18 @@ def events_to_image_drv(xn, yn, pn, jacobian_xn, jacobian_yn,
         device=None, sensor_size=(180, 240), clip_out_of_range=True,
         interpolation='bilinear', padding=True, compute_gradient=False):
     """
-    Method to turn event tensor to image. Allows for bilinear interpolation.
-        :param xs: tensor of x coords of events
-        :param ys: tensor of y coords of events
-        :param ps: tensor of event polarities/weights
-        :param device: the device on which the image is. If none, set to events device
-        :param sensor_size: the size of the image sensor/output image
-        :param clip_out_of_range: if the events go beyond the desired image size,
-            clip the events to fit into the image
-        :param interpolation: which interpolation to use. Options=None,'bilinear'
-        :param if bilinear interpolation, allow padding the image by 1 to allow events to fit:
+    Method to turn event tensor to image and derivative image (given event Jacobians).
+    Allows for bilinear interpolation.
+    @param xs Tensor of x coords of events
+    @param ys Tensor of y coords of events
+    @param ps Tensor of event polarities/weights
+    @param device The device on which the image is. If none, set to events device
+    @param sensor_size The size of the image sensor/output image
+    @param clip_out_of_range If the events go beyond the desired image size,
+       clip the events to fit into the image
+    @param interpolation Which interpolation to use. Options=None,'bilinear'
+    @param padding If bilinear interpolation, allow padding the image by 1 to allow events to fit:
+    @param compute_gradient If True, compute the image gradient
     """
     xt, yt, pt = torch.from_numpy(xn), torch.from_numpy(yn), torch.from_numpy(pn)
     xs, ys, ps, = xt.float(), yt.float(), pt.float()
@@ -196,24 +220,19 @@ def events_to_timestamp_image(xn, yn, ts, pn,
         device=None, sensor_size=(180, 240), clip_out_of_range=True,
         interpolation='bilinear', padding=True, normalize_timestamps=True):
     """
-    Method to generate the average timestamp images from 'Zhu19, Unsupervised Event-based Learning 
+    Method to generate the average timestamp images from 'Zhu19, Unsupervised Event-based Learning
     of Optical Flow, Depth, and Egomotion'. This method does not have known derivative.
-    Parameters
-    ----------
-    xs : list of event x coordinates 
-    ys : list of event y coordinates 
-    ts : list of event timestamps 
-    ps : list of event polarities 
-    device : the device that the events are on
-    sensor_size : the size of the event sensor/output voxels
-    clip_out_of_range: if the events go beyond the desired image size,
-       clip the events to fit into the image
-    interpolation: which interpolation to use. Options=None,'bilinear'
-    padding: if bilinear interpolation, allow padding the image by 1 to allow events to fit:
-    Returns
-    -------
-    img_pos: timestamp image of the positive events
-    img_neg: timestamp image of the negative events 
+    @param xs List of event x coordinates
+    @param ys List of event y coordinates
+    @param ts List of event timestamps
+    @param ps List of event polarities
+    @param device The device that the events are on
+    @param sensor_size The size of the event sensor/output voxels
+    @param clip_out_of_range If the events go beyond the desired image size,
+        clip the events to fit into the image
+    @param interpolation Which interpolation to use. Options=None,'bilinear'
+    @param padding If bilinear interpolation, allow padding the image by 1 to allow events to fit
+    @returns Timestamp images of the positive and negative events: ti_pos, ti_neg
     """
 
     t0 = ts[0]
@@ -268,25 +287,20 @@ def events_to_timestamp_image_torch(xs, ys, ts, ps,
         device=None, sensor_size=(180, 240), clip_out_of_range=True,
         interpolation='bilinear', padding=True, timestamp_reverse=False):
     """
-    Method to generate the average timestamp images from 'Zhu19, Unsupervised Event-based Learning 
+    Method to generate the average timestamp images from 'Zhu19, Unsupervised Event-based Learning
     of Optical Flow, Depth, and Egomotion'. This method does not have known derivative.
-    Parameters
-    ----------
-    xs : list of event x coordinates 
-    ys : list of event y coordinates 
-    ts : list of event timestamps 
-    ps : list of event polarities 
-    device : the device that the events are on
-    sensor_size : the size of the event sensor/output voxels
-    clip_out_of_range: if the events go beyond the desired image size,
-       clip the events to fit into the image
-    interpolation: which interpolation to use. Options=None,'bilinear'
-    padding: if bilinear interpolation, allow padding the image by 1 to allow events to fit:
-    timestamp_reverse: reverse the timestamps of the events, for backward warp
-    Returns
-    -------
-    img_pos: timestamp image of the positive events
-    img_neg: timestamp image of the negative events 
+    @param xs List of event x coordinates
+    @param ys List of event y coordinates
+    @param ts List of event timestamps
+    @param ps List of event polarities
+    @param device The device that the events are on
+    @param sensor_size The size of the event sensor/output voxels
+    @param clip_out_of_range If the events go beyond the desired image size,
+        clip the events to fit into the image
+    @param interpolation Which interpolation to use. Options=None,'bilinear'
+    @param padding If bilinear interpolation, allow padding the image by 1 to allow events to fit
+    @param timestamp_reverse Reverse the timestamps of the events, for backward warping
+    @returns Timestamp images of the positive and negative events: ti_pos, ti_neg
     """
     if device is None:
         device = xs.device
@@ -313,7 +327,7 @@ def events_to_timestamp_image_torch(xs, ys, ts, ps,
         normalized_ts = ((ts-ts[0])/(ts[-1]-ts[0]+epsilon)).squeeze()
     pxs = xs.floor().float()
     pys = ys.floor().float()
-    dxs = (xs-pxs).float() 
+    dxs = (xs-pxs).float()
     dys = (ys-pys).float()
     pxs = (pxs*mask).long()
     pys = (pys*mask).long()

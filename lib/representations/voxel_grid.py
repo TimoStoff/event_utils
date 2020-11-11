@@ -7,6 +7,12 @@ from ..util.event_util import events_bounds_mask
 from .image import events_to_image, events_to_image_torch
 
 def get_voxel_grid_as_image(voxelgrid):
+    """
+    Debug function. Returns a voxelgrid as a series of images,
+    one for each bin for display.
+    @param voxelgrid Input voxel grid
+    @returns Image of N bins placed side by side
+    """
     images = []
     splitter = np.ones((voxelgrid.shape[1], 2))*np.max(voxelgrid)
     for image in voxelgrid:
@@ -18,28 +24,30 @@ def get_voxel_grid_as_image(voxelgrid):
     return sidebyside
 
 def plot_voxel_grid(voxelgrid, cmap='gray'):
+    """
+    Debug function. Given a voxel grid, display it as an image.
+    @param voxelgrid The input voxel grid
+    @param cmap The color map to use
+    @returns None
+    """
     sidebyside = get_voxel_grid_as_image(voxelgrid)
     plt.imshow(sidebyside, cmap=cmap)
     plt.show()
 
 def voxel_grids_fixed_n_torch(xs, ys, ts, ps, B, n, sensor_size=(180, 240), temporal_bilinear=True):
     """
-    Given a set of events, return a list of voxel grids with a fixed number of events.
-    Parameters
-    ----------
-    xs : list of event x coordinates (torch tensor)
-    ys : list of event y coordinates (torch tensor)
-    ts : list of event timestamps (torch tensor)
-    ps : list of event polarities (torch tensor)
-    B : number of bins in output voxel grids (int)
-    n : the number of events per voxel
-    sensor_size : the size of the event sensor/output voxels
-    temporal_bilinear : whether the events should be naively
+    Given a set of events, return the voxel grid formed with a fixed number of events.
+    @param xs List of event x coordinates (torch tensor)
+    @param ys List of event y coordinates (torch tensor)
+    @param ts List of event timestamps (torch tensor)
+    @param ps List of event polarities (torch tensor)
+    @param B Number of bins in output voxel grids (int)
+    @param n The number of events per voxel
+    @param sensor_size The size of the event sensor/output voxels
+    @param temporal_bilinear Whether the events should be naively
         accumulated to the voxels (faster), or properly
         temporally distributed
-    Returns
-    -------
-    voxels: list of output voxel grids
+    @returns List of output voxel grids
     """
     voxels = []
     for idx in range(0, len(xs)-n, n):
@@ -50,22 +58,18 @@ def voxel_grids_fixed_n_torch(xs, ys, ts, ps, B, n, sensor_size=(180, 240), temp
 
 def voxel_grids_fixed_t_torch(xs, ys, ts, ps, B, t, sensor_size=(180, 240), temporal_bilinear=True):
     """
-    Given a set of events, return a list of voxel grids with a fixed temporal width.
-    Parameters
-    ----------
-    xs : list of event x coordinates (torch tensor)
-    ys : list of event y coordinates (torch tensor)
-    ts : list of event timestamps (torch tensor)
-    ps : list of event polarities (torch tensor)
-    B : number of bins in output voxel grids (int)
-    t : the time width of the voxel grids
-    sensor_size : the size of the event sensor/output voxels
-    temporal_bilinear : whether the events should be naively
+    Given a set of events, return a voxel grid with a fixed temporal width.
+    @param xs List of event x coordinates (torch tensor)
+    @param ys List of event y coordinates (torch tensor)
+    @param ts List of event timestamps (torch tensor)
+    @param ps List of event polarities (torch tensor)
+    @param B Number of bins in output voxel grids (int)
+    @param t The time width of the voxel grids
+    @param sensor_size The size of the event sensor/output voxels
+    @param temporal_bilinear Whether the events should be naively
         accumulated to the voxels (faster), or properly
         temporally distributed
-    Returns
-    -------
-    voxels: list of output voxel grids
+    @returns List of output voxel grids
     """
     device = xs.device
     voxels = []
@@ -75,27 +79,24 @@ def voxel_grids_fixed_t_torch(xs, ys, ts, ps, B, t, sensor_size=(180, 240), temp
             sensor_size=sensor_size, temporal_bilinear=temporal_bilinear))
     return voxels
 
-def events_to_voxel_timesync_torch(xs, ys, ts, ps, B, t0, t1, device=None, np_ts=None, sensor_size=(180, 240), temporal_bilinear=True):
+def events_to_voxel_timesync_torch(xs, ys, ts, ps, B, t0, t1, device=None, np_ts=None,
+        sensor_size=(180, 240), temporal_bilinear=True):
     """
     Given a set of events, return a voxel grid of the events between t0 and t1
-    Parameters
-    ----------
-    xs : list of event x coordinates (torch tensor)
-    ys : list of event y coordinates (torch tensor)
-    ts : list of event timestamps (torch tensor)
-    ps : list of event polarities (torch tensor)
-    B : number of bins in output voxel grids (int)
-    t0 : the start time of the voxel grid
-    t1 : the end time of the voxel grid
-    device : device to put voxel grid. If left empty, same device as events
-    np_ts : a numpy copy of ts (optional). If not given, will be created in situ
-    sensor_size : the size of the event sensor/output voxels
-    temporal_bilinear : whether the events should be naively
+    @param xs List of event x coordinates (torch tensor)
+    @param ys List of event y coordinates (torch tensor)
+    @param ts List of event timestamps (torch tensor)
+    @param ps List of event polarities (torch tensor)
+    @param B Number of bins in output voxel grids (int)
+    @param t0 The start time of the voxel grid
+    @param t1 The end time of the voxel grid
+    @param device Device to put voxel grid. If left empty, same device as events
+    @param np_ts A numpy copy of ts (optional). If not given, will be created in situ
+    @param sensor_size The size of the event sensor/output voxels
+    @param temporal_bilinear Whether the events should be naively
         accumulated to the voxels (faster), or properly
         temporally distributed
-    Returns
-    -------
-    voxel: voxel of the events between t0 and t1
+    @returns Voxel of the events between t0 and t1
     """
     assert(t1>t0)
     if np_ts is None:
@@ -113,21 +114,17 @@ def events_to_voxel_timesync_torch(xs, ys, ts, ps, B, t0, t1, device=None, np_ts
 def events_to_voxel_torch(xs, ys, ts, ps, B, device=None, sensor_size=(180, 240), temporal_bilinear=True):
     """
     Turn set of events to a voxel grid tensor, using temporal bilinear interpolation
-    Parameters
-    ----------
-    xs : list of event x coordinates (torch tensor)
-    ys : list of event y coordinates (torch tensor)
-    ts : list of event timestamps (torch tensor)
-    ps : list of event polarities (torch tensor)
-    B : number of bins in output voxel grids (int)
-    device : device to put voxel grid. If left empty, same device as events
-    sensor_size : the size of the event sensor/output voxels
-    temporal_bilinear : whether the events should be naively
+    @param xs List of event x coordinates (torch tensor)
+    @param ys List of event y coordinates (torch tensor)
+    @param ts List of event timestamps (torch tensor)
+    @param ps List of event polarities (torch tensor)
+    @param B Number of bins in output voxel grids (int)
+    @param device Device to put voxel grid. If left empty, same device as events
+    @param sensor_size The size of the event sensor/output voxels
+    @param temporal_bilinear Whether the events should be naively
         accumulated to the voxels (faster), or properly
         temporally distributed
-    Returns
-    -------
-    voxel: voxel of the events between t0 and t1
+    @returns Voxel of the events between t0 and t1
     """
     if device is None:
         device = xs.device
@@ -160,22 +157,17 @@ def events_to_neg_pos_voxel_torch(xs, ys, ts, ps, B, device=None,
     """
     Turn set of events to a voxel grid tensor, using temporal bilinear interpolation.
     Positive and negative events are put into separate voxel grids
-    Parameters
-    ----------
-    xs : list of event x coordinates 
-    ys : list of event y coordinates 
-    ts : list of event timestamps 
-    ps : list of event polarities 
-    B : number of bins in output voxel grids (int)
-    device : the device that the events are on
-    sensor_size : the size of the event sensor/output voxels
-    temporal_bilinear : whether the events should be naively
+    @param xs List of event x coordinates (torch tensor)
+    @param ys List of event y coordinates (torch tensor)
+    @param ts List of event timestamps (torch tensor)
+    @param ps List of event polarities (torch tensor)
+    @param B Number of bins in output voxel grids (int)
+    @param device Device to put voxel grid. If left empty, same device as events
+    @param sensor_size The size of the event sensor/output voxels
+    @param temporal_bilinear Whether the events should be naively
         accumulated to the voxels (faster), or properly
         temporally distributed
-    Returns
-    -------
-    voxel_pos: voxel of the positive events
-    voxel_neg: voxel of the negative events
+    @returns Two voxel grids, one for positive one for negative events
     """
     zero_v = torch.tensor([0.])
     ones_v = torch.tensor([1.])
@@ -192,20 +184,16 @@ def events_to_neg_pos_voxel_torch(xs, ys, ts, ps, B, device=None,
 def events_to_voxel(xs, ys, ts, ps, B, sensor_size=(180, 240), temporal_bilinear=True):
     """
     Turn set of events to a voxel grid tensor, using temporal bilinear interpolation
-    Parameters
-    ----------
-    xs : list of event x coordinates 
-    ys : list of event y coordinates 
-    ts : list of event timestamps 
-    ps : list of event polarities 
-    B : number of bins in output voxel grids (int)
-    sensor_size : the size of the event sensor/output voxels
-    temporal_bilinear : whether the events should be naively
+    @param xs List of event x coordinates (torch tensor)
+    @param ys List of event y coordinates (torch tensor)
+    @param ts List of event timestamps (torch tensor)
+    @param ps List of event polarities (torch tensor)
+    @param B Number of bins in output voxel grids (int)
+    @param sensor_size The size of the event sensor/output voxels
+    @param temporal_bilinear Whether the events should be naively
         accumulated to the voxels (faster), or properly
         temporally distributed
-    Returns
-    -------
-    voxel: voxel of the events between t0 and t1
+    @returns Voxel of the events between t0 and t1
     """
     assert(len(xs)==len(ys) and len(ys)==len(ts) and len(ts)==len(ps))
     num_events_per_bin = len(xs)//B
@@ -233,21 +221,16 @@ def events_to_neg_pos_voxel(xs, ys, ts, ps, B,
     """
     Turn set of events to a voxel grid tensor, using temporal bilinear interpolation.
     Positive and negative events are put into separate voxel grids
-    Parameters
-    ----------
-    xs : list of event x coordinates 
-    ys : list of event y coordinates 
-    ts : list of event timestamps 
-    ps : list of event polarities 
-    B : number of bins in output voxel grids (int)
-    sensor_size : the size of the event sensor/output voxels
-    temporal_bilinear : whether the events should be naively
+    @param xs List of event x coordinates (torch tensor)
+    @param ys List of event y coordinates (torch tensor)
+    @param ts List of event timestamps (torch tensor)
+    @param ps List of event polarities (torch tensor)
+    @param B Number of bins in output voxel grids (int)
+    @param sensor_size The size of the event sensor/output voxels
+    @param temporal_bilinear Whether the events should be naively
         accumulated to the voxels (faster), or properly
         temporally distributed
-    Returns
-    -------
-    voxel_pos: voxel of the positive events
-    voxel_neg: voxel of the negative events
+    @returns Two voxel grids, one for positive one for negative events
     """
     pos_weights = np.where(ps, 1, 0)
     neg_weights = np.where(ps, 0, 1)
