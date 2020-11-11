@@ -14,7 +14,7 @@ def events_to_image(xs, ys, ps, sensor_size=(180, 240), interpolation=None, padd
     @param meanval If true, divide the sum of the values by the number of events at that location
     @returns Event image from the input events
     """
-    img_size = sensor_size
+    img_size = (sensor_size[0]+1, sensor_size[1]+1)
     if interpolation == 'bilinear' and xs.dtype is not torch.long and xs.dtype is not torch.long:
         xt, yt, pt = torch.from_numpy(xs), torch.from_numpy(ys), torch.from_numpy(ps)
         xt, yt, pt = xt.float(), yt.float(), pt.float()
@@ -22,26 +22,26 @@ def events_to_image(xs, ys, ps, sensor_size=(180, 240), interpolation=None, padd
         img[img==0] = default
         img = img.numpy()
         if meanval:
-            event_count_image = events_to_image_torch(xt, yt, torch.ones_like(xt), 
+            event_count_image = events_to_image_torch(xt, yt, torch.ones_like(xt),
                     clip_out_of_range=True, padding=padding)
             event_count_image = event_count_image.numpy()
     else:
         coords = np.stack((ys, xs))
         try:
-            abs_coords = np.ravel_multi_index(coords, sensor_size)
+            abs_coords = np.ravel_multi_index(coords, img_size)
         except ValueError:
             print("Issue with input arrays! minx={}, maxx={}, miny={}, maxy={}, coords.shape={}, \
                     sum(coords)={}, sensor_size={}".format(np.min(xs), np.max(xs), np.min(ys), np.max(ys),
-                        coords.shape, np.sum(coords), sensor_size))
+                        coords.shape, np.sum(coords), img_size))
             raise ValueError
-        img = np.bincount(abs_coords, weights=ps, minlength=sensor_size[0]*sensor_size[1])
-        img = img.reshape(sensor_size)
+        img = np.bincount(abs_coords, weights=ps, minlength=img_size[0]*img_size[1])
+        img = img.reshape(img_size)
         if meanval:
-            event_count_image = np.bincount(abs_coords, weights=np.ones_like(xs), minlength=sensor_size[0]*sensor_size[1])
-            event_count_image = event_count_image.reshape(sensor_size)
+            event_count_image = np.bincount(abs_coords, weights=np.ones_like(xs), minlength=img_size[0]*img_size[1])
+            event_count_image = event_count_image.reshape(img_size)
     if meanval:
         img = np.divide(img, event_count_image, out=np.ones_like(img)*default, where=event_count_image!=0)
-    return img
+    return img[0:sensor_size[0], 0:sensor_size[1]]
 
 def events_to_image_torch(xs, ys, ps,
         device=None, sensor_size=(180, 240), clip_out_of_range=True,

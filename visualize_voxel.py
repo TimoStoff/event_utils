@@ -65,8 +65,8 @@ if __name__ == "__main__":
 
     parser.add_argument("--num_show", type=int, default=-1, help="How many events to show per plot. If -1, show all events.")
     parser.add_argument("--event_size", type=float, default=2, help="Marker size of the plotted events")
-    parser.add_argument("--elev", type=float, default=0, help="Elevation of plot")
-    parser.add_argument("--azim", type=float, default=45, help="Azimuth of plot")
+    parser.add_argument("--elev", type=float, default=20, help="Elevation of plot")
+    parser.add_argument("--azim", type=float, default=-25, help="Azimuth of plot")
     parser.add_argument("--stride", type=int, default=1, help="Downsample stride for plotted images.")
     parser.add_argument("--skip_frames", type=int, default=1, help="Amount of frames to place per plot.")
     parser.add_argument("--start_frame", type=int, default=0, help="On which frame to start.")

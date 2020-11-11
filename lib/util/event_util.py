@@ -3,12 +3,25 @@ import h5py
 from ..representations.image import events_to_image
 
 def infer_resolution(xs, ys):
+    """
+    Given events, guess the resolution by looking at the max and min values
+    @param xs Event x coords
+    @param ys Event y coords
+    @return Inferred resolution
+    """
     sr = [np.max(ys) + 1, np.max(xs) + 1]
     return sr
 
 def events_bounds_mask(xs, ys, x_min, x_max, y_min, y_max):
     """
     Get a mask of the events that are within the given bounds
+    @param xs Event x coords
+    @param ys Event y coords
+    @param x_min Lower bound of x axis
+    @param x_max Upper bound of x axis
+    @param y_min Lower bound of y axis
+    @param y_max Upper bound of y axis
+    @return mask
     """
     mask = np.where(np.logical_or(xs<=x_min, xs>x_max), 0.0, 1.0)
     mask *= np.where(np.logical_or(ys<=y_min, ys>y_max), 0.0, 1.0)

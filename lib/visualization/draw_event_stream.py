@@ -13,6 +13,18 @@ from .visualization_utils import *
 from tqdm import tqdm
 
 def plot_events_sliding(xs, ys, ts, ps, args, frames=[], frame_ts=[]):
+    """
+    Plot the given events in a sliding window fashion to generate a video
+    @param xs x component of events
+    @param ys y component of events
+    @param ts t component of events
+    @param ps p component of events
+    @param args Arguments for the rendering (see args list
+        for 'plot_events' function)
+    @param frames List of image frames
+    @param frame_ts List of the image timestamps
+    @returns None
+    """
     dt, sdt = args.w_width, args.sw_width
     if dt is None:
         dt = (ts[-1]-ts[0])/10
@@ -41,10 +53,6 @@ def plot_events_sliding(xs, ys, ts, ps, args, frames=[], frame_ts=[]):
             wframes = [frames[fidx0]]
             wframe_ts = [wts[0]]
 
-            #if fidx0 != fidx1:
-            #    wframes = frames[fidx0:fidx1]
-            #    wframe_ts = frame_ts[fidx0:fidx1]
-
         save_path = os.path.join(args.output_path, "frame_{:010d}.jpg".format(i))
 
         perc = i/n_frames
@@ -66,6 +74,21 @@ def plot_events_sliding(xs, ys, ts, ps, args, frames=[], frame_ts=[]):
 
 def plot_voxel_grid(xs, ys, ts, ps, bins=5, frames=[], frame_ts=[],
         sensor_size=None, crop=None, elev=0, azim=45, show_axes=False):
+    """
+    @param xs x component of events
+    @param ys y component of events
+    @param ts t component of events
+    @param ps p component of events
+    @param bins The number of bins to have in the voxel grid
+    @param frames The list of image frames
+    @param frame_ts The list of image timestamps
+    @param sensor_size The size of the event sensor resolution
+    @param crop Cropping parameters for the voxel grid (no crop if None)
+    @param elev The elevation of the plot
+    @param azim The azimuth of the plot
+    @param show_axes Show the axes of the plot
+    @returns None
+    """
     if sensor_size is None:
         sensor_size = [np.max(ys)+1, np.max(xs)+1] if len(frames)==0 else frames[0].shape
     if crop is not None:
@@ -132,25 +155,37 @@ def plot_events(xs, ys, ts, ps, save_path=None, num_compress='auto', num_show=10
         marker='.', stride = 1, invert=False, img_size=None, show_axes=False):
     """
     Given events, plot these in a spatiotemporal volume.
-    :param: xs x coords of events
-    :param: ys y coords of events
-    :param: ts t coords of events
-    :param: ps p coords of events
-    :param: save_path if set, will save plot to here
-    :param: num_compress will take this number of events from the end
-        and create an event image from these. This event image will
-        be displayed at the end of the spatiotemporal volume
-    :param: num_show sets the number of events to plot. If set to -1
+    @param xs x coords of events
+    @param ys y coords of events
+    @param ts t coords of events
+    @param ps p coords of events
+    @param save_path If set, will save plot to here
+    @param num_compress Takes num_compress events from the beginning of the
+        sequence and draws them in the plot at time $t=0$ in black
+    @param compress_front If True, display the compressed events in black at the
+        front of the spatiotemporal volume rather than the back
+    @param num_show Sets the number of events to plot. If set to -1
         will plot all of the events (can be potentially expensive)
-    :param: event_size sets the size of the plotted events
-    :param: elev sets the elevation of the plot
-    :param: azim sets the azimuth of the plot
-    :param: imgs a list of images to draw into the spatiotemporal volume
-    :param: img_ts a list of the position on the temporal axis where each
+    @param event_size Sets the size of the plotted events
+    @param elev Sets the elevation of the plot
+    @param azim Sets the azimuth of the plot
+    @param imgs A list of images to draw into the spatiotemporal volume
+    @param img_ts A list of the position on the temporal axis where each
         image from 'imgs' is to be placed (the timestamp of the images, usually)
-    :param: show_events if False, will not plot the events (only images)
-    :param: crop a list of length 4 that sets the crop of the plot (must
+    @param show_events If False, will not plot the events (only images)
+    @param show_plot If True, display the plot in a matplotlib window as
+        well as saving to disk
+    @param crop A list of length 4 that sets the crop of the plot (must
         be in the format [top_left_y, top_left_x, height, width]
+    @param marker Which marker should be used to display the events (default
+        is '.', which results in points, but circles 'o' or crosses 'x' are
+        among many other possible options)
+    @param stride Determines the pixel stride of the image rendering
+        (1=full resolution, but can be quite resource intensive)
+    @param invert Inverts the color scheme for black backgrounds
+    @param img_size The size of the sensor resolution. Inferred if empty.
+    @param show_axes If True, draw axes onto the plot.
+    @returns None
     """
     #Crop events
     if img_size is None:
@@ -233,9 +268,6 @@ def plot_events(xs, ys, ts, ps, save_path=None, num_compress='auto', num_show=10
     ax.set_ylim3d(ts[0], ts[-1])
     ax.set_zlim3d(0,img_size[0])
 
-    #ax.xaxis.set_visible(False)
-    #ax.axes.get_yaxis().set_visible(False)
-
     if show_plot:
         plt.show()
     if save_path is not None:
@@ -244,6 +276,18 @@ def plot_events(xs, ys, ts, ps, save_path=None, num_compress='auto', num_show=10
     plt.close()
 
 def plot_between_frames(xs, ys, ts, ps, frames, frame_event_idx, args, plttype='voxel'):
+    """
+    Plot events between frames for an entire sequence to form a video
+    @param xs x component of events
+    @param ys y component of events
+    @param ts t component of events
+    @param ps p component of events
+    @param frames List of the frames
+    @param frame_event_idx The event index for each frame
+    @param args Arguments for the rendering function 'plot_events'
+    @param plttype Whether to plot 'voxel' or 'events'
+    @return None
+    """
     args.crop = None if args.crop is None else parse_crop(args.crop)
     prev_idx = 0
     for i in range(0, len(frames), args.skip_frames):
