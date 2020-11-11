@@ -3,6 +3,14 @@ import numpy as np
 import os
 
 def compute_indices(event_stamps, frame_stamps):
+    """
+    Given event timestamps and frame timestamps as arrays,
+    find the event indices that correspond to the beginning and
+    end period of each frames
+    @param event_stamps The event timestamps
+    @param frame_stamps The frame timestamps
+    @returns The indices as a 2xN numpy array (N=number of frames)
+    """
     indices_first = np.searchsorted(event_stamps[:,0], frame_stamps[1:])
     indices_last = np.searchsorted(event_stamps[:,0], frame_stamps[:-1])
     index = np.stack([indices_first, indices_last], -1)
@@ -12,6 +20,34 @@ def read_memmap_events(memmap_path, skip_frames=1, return_events=False, images_f
         images_ts_file = 'timestamps.npy', optic_flow_file = 'optic_flow.npy',
         optic_flow_ts_file = 'optic_flow_timestamps.npy', events_xy_file = 'xy.npy',
         events_p_file = 'p.npy', events_t_file = 't.npy'):
+    """
+    Given a path to an RPG-style memmap, read the events it contains.
+    These memmaps break images, timestamps, optic flow, xy, p and t
+    components of events into separate files.
+    @param memmap_path Path to the root directory of the memmap
+    @param skip_frames Skip reading every 'skip_frames'th frame, default=1
+    @param return_events If True, return the events as numpy arrays, else return
+        a handle to the event data files (which can be indexed, but does not load
+        events into RAM)
+    @param images_file The file containing images
+    @param images_ts_file The file containing image timestamps
+    @param optic_flow_file The file containing optic flow frames
+    @param optic_flow_ts_file The file containing optic flow frame timestamps
+    @param events_xy_file The file containing event coordinate data
+    @param events_p_file The file containing the event polarities
+    @param events_ts_file The file containing the event timestamps
+    @return dict with event data:
+        data = {
+            "index": index mapping image index to event idx
+            "frame_stamps": frame timestamps
+            "images": images
+            "optic_flow": optic flow
+            "optic_flow_stamps": of timestamps
+            "t": event timestamps
+            "xy": event coords
+            "p": event polarities
+            "t0": t0
+    """
     assert os.path.isdir(memmap_path), '%s is not a valid memmap_pathectory' % memmap_path
 
     data = {}
@@ -60,6 +96,9 @@ def read_memmap_events_dict(memmap_path, skip_frames=1, return_events=False, ima
         images_ts_file = 'timestamps.npy', optic_flow_file = 'optic_flow.npy',
         optic_flow_ts_file = 'optic_flow_timestamps.npy', events_xy_file = 'xy.npy',
         events_p_file = 'p.npy', events_t_file = 't.npy'):
+    """
+    Read memmap file events and return them in a dict
+    """
     data = read_memmap_events(memmap_path, skip_frames, return_events, images_file, images_ts_file,
             optic_flow_file, optic_flow_ts_file, events_xy_file, events_p_file, events_t_file)
     events = {
@@ -70,6 +109,11 @@ def read_memmap_events_dict(memmap_path, skip_frames=1, return_events=False, ima
     return events
 
 def read_h5_events(hdf_path):
+    """
+    Read events from HDF5 file (Monash style).
+    @param hdf_path Path to HDF5 file
+    @returns Events as 4xN numpy array (N=num events)
+    """
     f = h5py.File(hdf_path, 'r')
     if 'events/x' in f:
         #legacy
@@ -79,6 +123,11 @@ def read_h5_events(hdf_path):
     return events
 
 def read_h5_event_components(hdf_path):
+    """
+    Read events from HDF5 file (Monash style).
+    @param hdf_path Path to HDF5 file
+    @returns Events as four np arrays with the event components
+    """
     f = h5py.File(hdf_path, 'r')
     if 'events/x' in f:
         #legacy
@@ -87,6 +136,13 @@ def read_h5_event_components(hdf_path):
         return (f['events/xs'][:], f['events/ys'][:], f['events/ts'][:], np.where(f['events/ps'][:], 1, -1))
 
 def read_h5_events_dict(hdf_path, read_frames=True):
+    """
+    Read events from HDF5 file (Monash style).
+    @param hdf_path Path to HDF5 file
+    @returns Events as a dict with entries 'xs', 'ys', 'ts', 'ps' containing the event components,
+        'frames' containing the frames, 'frame_timestamps' containing frame timestamps and
+        'frame_event_indices' containing the indices of the corresponding event for each frame
+    """
     f = h5py.File(hdf_path, 'r')
     if 'events/x' in f:
         #legacy
