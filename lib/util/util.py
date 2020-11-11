@@ -13,6 +13,11 @@ import cv2 as cv
 
 
 def ensure_dir(dirname):
+    """
+    Ensure a directory exists, if not create it
+    @param dirname Directory name
+    @returns None
+    """
     dirname = Path(dirname)
     if not dirname.is_dir():
         dirname.mkdir(parents=True, exist_ok=False)
@@ -122,6 +127,17 @@ def plot_image(image, lognorm=False, cmap='gray', bbox=None, ticks=False, norm=T
 def plot_image_grid(images, grid_shape=None, lognorm=False,
         cmap='gray', bbox=None, norm=True, savename=None,
         colorbar=False):
+    """
+    Given a list of images, stitches them into a grid and displays/saves the grid
+    @param images List of images
+    @param grid_shape Shape of the grid
+    @param lognorm Logarithmic normalise the image
+    @param cmap Color map to use
+    @param bbox Draw a bounding box on the image
+    @param norm If True, normalise the image
+    @param savename If set, save the image to that path
+    @param colorbar If true, plot the colorbar
+    """
     if grid_shape is None:
         grid_shape = [1, len(images)]
 
@@ -167,10 +183,9 @@ def flow2bgr_np(disp_x, disp_y, max_magnitude=None):
     """
     Convert an optic flow tensor to an RGB color map for visualization
     Code adapted from: https://github.com/ClementPinard/FlowNetPytorch/blob/master/main.py#L339
-
-    :param disp_x: a [H x W] NumPy array containing the X displacement
-    :param disp_y: a [H x W] NumPy array containing the Y displacement
-    :returns bgr: a [H x W x 3] NumPy array containing a color-coded representation of the flow [0, 255]
+    @param disp_x A [H x W] NumPy array containing the X displacement
+    @param disp_y A [H x W] NumPy array containing the Y displacement
+    @returns A [H x W x 3] NumPy array containing a color-coded representation of the flow [0, 255]
     """
     assert(disp_x.shape == disp_y.shape)
     H, W = disp_x.shape

@@ -7,7 +7,7 @@ def infer_resolution(xs, ys):
     Given events, guess the resolution by looking at the max and min values
     @param xs Event x coords
     @param ys Event y coords
-    @return Inferred resolution
+    @returns Inferred resolution
     """
     sr = [np.max(ys) + 1, np.max(xs) + 1]
     return sr
@@ -21,7 +21,7 @@ def events_bounds_mask(xs, ys, x_min, x_max, y_min, y_max):
     @param x_max Upper bound of x axis
     @param y_min Lower bound of y axis
     @param y_max Upper bound of y axis
-    @return mask
+    @returns mask
     """
     mask = np.where(np.logical_or(xs<=x_min, xs>x_max), 0.0, 1.0)
     mask *= np.where(np.logical_or(ys<=y_min, ys>y_max), 0.0, 1.0)
@@ -29,6 +29,19 @@ def events_bounds_mask(xs, ys, x_min, x_max, y_min, y_max):
 
 def cut_events_to_lifespan(xs, ys, ts, ps, params,
         pixel_crossings, minimum_events=100, side='back'):
+    """
+    Given motion model parameters, compute the speed and thus
+    the lifespan, given a desired number of pixel crossings
+    @param xs Event x coords
+    @param ys Event y coords
+    @param ts Event timestamps
+    @param ps Event polarities
+    @param params Motion model parameters
+    @param pixel_crossings Number of pixel crossings
+    @param minimum_events The minimum number of events to cut down to
+    @param side Cut events from 'back' or 'front'
+    @returns Cut events
+    """
     magnitude = np.linalg.norm(params)
     dt = pixel_crossings/magnitude
     if side == 'back':
@@ -48,15 +61,16 @@ def cut_events_to_lifespan(xs, ys, ts, ps, params,
 def clip_events_to_bounds(xs, ys, ts, ps, bounds, set_zero=False):
     """
     Clip events to the given bounds.
-    :param: xs x coords of events
-    :param: ys y coords of events
-    :param: ts t coords of events (may be None)
-    :param: ps p coords of events (may be None)
-    :param: bounds the bounds of the events. Must be list of
-        length 2 (in which case the lower bound is assumed to be 0,0)
-        or length 4, in format [min_y, max_y, min_x, max_x]
-    :param: set_zero if True, simply multiplies the out of bounds events with 0 mask.
+    @param xs x coords of events
+    @param ys y coords of events
+    @param ts Timestamps of events (may be None)
+    @param ps Polarities of events (may be None)
+    @param bounds the bounds of the events. Must be list of
+       length 2 (in which case the lower bound is assumed to be 0,0)
+       or length 4, in format [min_y, max_y, min_x, max_x]
+    @param: set_zero if True, simply multiplies the out of bounds events with 0 mask.
         Otherwise, removes the events.
+    @returns Clipped events
     """
     if len(bounds) == 2:
         bounds = [0, bounds[0], 0, bounds[1]]
@@ -95,6 +109,16 @@ def get_events_from_mask(mask, xs, ys):
     return event_indices
 
 def binary_search_h5_dset(dset, x, l=None, r=None, side='left'):
+    """
+    Binary search for a timestamp in an HDF5 event file, without
+    loading the entire file into RAM
+    @param dset The HDF5 dataset
+    @param x The timestamp being searched for
+    @param l Starting guess for the left side (0 if None is chosen)
+    @param r Starting guess for the right side (-1 if None is chosen)
+    @param side Which side to take final result for if exact match is not found
+    @returns Index of nearest event to 'x'
+    """
     l = 0 if l is None else l
     r = len(dset)-1 if r is None else r
     while l <= r:
@@ -115,6 +139,15 @@ def binary_search_h5_timestamp(hdf_path, l, r, x, side='left'):
     return binary_search_h5_dset(f['events/ts'], x, l=l, r=r, side=side)
 
 def binary_search_torch_tensor(t, l, r, x, side='left'):
+    """
+    Binary search implemented for pytorch tensors (no native implementation exists)
+    @param t The tensor
+    @param x The value being searched for
+    @param l Starting lower bound (0 if None is chosen)
+    @param r Starting upper bound (-1 if None is chosen)
+    @param side Which side to take final result for if exact match is not found
+    @returns Index of nearest event to 'x'
+    """
     if r is None:
         r = len(t)-1
     while l <= r:
@@ -131,6 +164,17 @@ def binary_search_torch_tensor(t, l, r, x, side='left'):
     return r
 
 def remove_hot_pixels(xs, ys, ts, ps, sensor_size=(180, 240), num_hot=50):
+    """
+    Given a set of events, removes the 'hot' pixel events.
+    Accumulates all of the events into an event image and removes
+    the 'num_hot' highest value pixels.
+    @param xs Event x coords
+    @param ys Event y coords
+    @param ts Event timestamps
+    @param ps Event polarities
+    @param sensor_size The size of the event camera sensor
+    @param num_hot The number of hot pixels to remove
+    """
     img = events_to_image(xs, ys, ps, sensor_size=sensor_size)
     hot = np.array([])
     for i in range(num_hot):
