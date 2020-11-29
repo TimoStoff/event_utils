@@ -78,6 +78,6 @@ class pure_rotation_warp(warp_function):
     """
     def __init__(self):
         warp_function.__init__(self, 'pure_rotation_warp', 4)
-
+{not:timeslice}
     def warp(self, xs, ys, ts, ps, t0, params, compute_grad=False):
         pass
