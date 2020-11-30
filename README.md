@@ -37,6 +37,6 @@ Events can then optionally be cropped in the case that they overflow the sensor 
 Some possible augmentations are shown below:
 Since the augmentations are implemented using vectorisation, the heavy lifting is done in optimised C/C++ backends and is thus very fast.
 
-![Augmentation examples](https://github.com/TimoStoff/event_utils/.images/augmentation.png)
+![Augmentation examples](https://github.com/TimoStoff/event_utils/blob/master/.images/augmentation.png)
 
 Coming soon. For now, use the code in https://github.com/TimoStoff/events_contrast_maximization for dataset conversion code etc.
