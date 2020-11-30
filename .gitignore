@@ -119,7 +119,6 @@ __MACOSX/
 # outputs
 *.jpg
 *.jpeg
-*.png
 *.h5
 *.swp
 
