@@ -39,6 +39,7 @@ Since the augmentations are implemented using vectorisation, the heavy lifting i
 
 ![Augmentation examples](https://github.com/TimoStoff/event_utils/blob/master/.images/augmentation.png)
 
-Some examples of augmentations on the `slider_depth` sequence from 
+Some examples of augmentations on the `slider_depth` sequence from the [event camera dataset](http://rpg.ifi.uzh.ch/davis_data.html) can be seen above (events in red and blue with the first events in black to show scene structure). (a) the original event stream, (b) doubling the events by adding random _correlated_ events, (c) doubling the events by adding fully random (normal distribution) events, (d) halving the events by removing random, (e) flipping the events horizontally, (f) rotating the events 45 degrees. Demo code to reproduce these plots can be found by executing the following (note that the events need to be in HDF5 format):
+```python lib/augmentation/event_augmentation.py /path/to/slider_depth.h5 --output_path /tmp```
 
 Coming soon. For now, use the code in https://github.com/TimoStoff/events_contrast_maximization for dataset conversion code etc.
