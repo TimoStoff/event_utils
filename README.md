@@ -39,4 +39,6 @@ Since the augmentations are implemented using vectorisation, the heavy lifting i
 
 ![Augmentation examples](https://github.com/TimoStoff/event_utils/blob/master/.images/augmentation.png)
 
+Some examples of augmentations on the `slider_depth` sequence from 
+
 Coming soon. For now, use the code in https://github.com/TimoStoff/events_contrast_maximization for dataset conversion code etc.
