@@ -1,5 +1,14 @@
 # event_utils
-Event based vision utility library.
+Event based vision utility library. For additional detail, see the thesis document [Motion Estimation by Focus Optimisation: Optic Flow and Motion Segmentation with Event Cameras](https://timostoff.github.io/thesis). If you use this code in an academic context, please cite:
+```
+@PhDThesis{Stoffregen20Thesis,
+  author        = {Timo Stoffregen},
+  title         = {Motion Estimation by Focus Optimisation: Optic Flow and Motion Segmentation with Event Cameras},
+  school        = {Department of Electrical and Computer Systems Engineering, Monash University},
+  year          = 2020
+}
+
+```
 
 This is an event based vision utility library with functionality for focus optimisation, deep learning, event-stream noise augmentation, data format conversion and efficient generation of various event representations (event images, voxel grids etc).
 
