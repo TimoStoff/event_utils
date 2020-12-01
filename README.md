@@ -57,6 +57,10 @@ The most important functionality is provided by:
 Produces plots as in below image.
 * `main`: Demo showing various capabilities and code examples.
 
+![Focus Optimisation](https://github.com/TimoStoff/event_utils/blob/master/.images/cmax.png)
+
+Examples can be seen in the images above: each set of events is drawn with the variance objective function (w.r.t. optic flow motion model) underneath. This set of tools allows optimising the objective function to recover the motion parameters (images generated with the library). 
+
 ### `objectives.py`
 This file implements various objective functions described in this thesis as well as some other commonly cited works.
 Objective functions inherit from the parent class `objective_function`.
@@ -204,6 +208,8 @@ In summary, `BaseVoxelDataset` allows for very fast, on-device data-loading and 
 
 ## `representations`
 This library contains code for generating representations from the events in a highly efficient, `gpu` ready manner.
+![Representations](https://github.com/TimoStoff/event_utils/blob/master/.images/representations.png)
+Various representations can be seen above with (a) the raw events, (b) the voxel grid, (c) the event image, (d) the timestamp image.
 ### `voxel_grid.py`
 This file contains several means for forming and viewing voxel grids from events.
 There are two versions of each function, representing a pure `numpy` and a `pytorch` implementation.
@@ -318,4 +324,5 @@ Invoking:
 ```python visualize_voxel.py /path/to/slider_depth.h5```
 produces voxels of the `slider_depth` sequence.
 \input{figures/appendix/slider_vis/fig.tex}
-Coming soon. For now, use the code in https://github.com/TimoStoff/events_contrast_maximization for dataset conversion code etc.
+![Visualisation](https://github.com/TimoStoff/event_utils/blob/master/.images/visualisations.png)
+Typical visualisations are shown above: the `slider_depth` sequence is drawn as successive frames of events (top) and voxels (bottom).
