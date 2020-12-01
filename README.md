@@ -57,7 +57,7 @@ The most important functionality is provided by:
 Produces plots as in below image.
 * `main`: Demo showing various capabilities and code examples.
 
-# `objectives.py`
+### `objectives.py`
 This file implements various objective functions described in this thesis as well as some other commonly cited works.
 Objective functions inherit from the parent class `objective_function}.
 The idea is to make it as easy as possible to add new, custom objective functions by providing a common API for the optimisation code.
@@ -88,7 +88,7 @@ The objective functions implemented in this file are:
 * `r1_objective`: Combined objective function R1 [Event Cameras, Contrast Maximization and Reward Functions: An Analysis](https://openaccess.thecvf.com/content_CVPR_2019/html/Stoffregen_Event_Cameras_Contrast_Maximization_and_Reward_Functions_An_Analysis_CVPR_2019_paper.html)
 * `r2_objective`: Combined objective function R2 [Event Cameras, Contrast Maximization and Reward Functions: An Analysis](https://openaccess.thecvf.com/content_CVPR_2019/html/Stoffregen_Event_Cameras_Contrast_Maximization_and_Reward_Functions_An_Analysis_CVPR_2019_paper.html)
 
-# `warps.py`
+### `warps.py`
 This file implements warping functions described in this thesis as well as some other commonly cited works.
 Objective functions inherit from the parent class `warp_function`.
 The idea is to make it as easy as possible to add new, custom warping functions by providing a common API for the optimisation code.
