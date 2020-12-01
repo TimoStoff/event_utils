@@ -250,10 +250,6 @@ if __name__ == "__main__":
     nx, ny, nt, npo = add_correlated_events(xs[s:s+num], ys[s:s+num], ts[s:s+num], ps[s:s+num], num_to_add)
     plot_events(nx, ny, nt, npo, elev=30, num_compress=num_comp, num_show=-1, save_path=pth, show_axes=True, compress_front=True)
 
-    #pth = os.path.join(out_dir, "img2")
-    #nx, ny, nt, npo = add_correlated_events(xs[s:s+num], ys[s:s+num], ts[s:s+num], ps[s:s+num], num_to_add, add_noise=5000)
-    #plot_events(nx, ny, nt, npo, elev=30, num_compress=num_comp, num_show=-1, save_path=pth, show_axes=True, compress_front=True)
-
     pth = os.path.join(out_dir, "img3")
     nx, ny, nt, npo = add_random_events(xs[s:s+num], ys[s:s+num], ts[s:s+num], ps[s:s+num], num_to_add, sensor_resolution=(180,240))
     plot_events(nx, ny, nt, npo, elev=30, num_compress=num_comp, num_show=-1, save_path=pth, show_axes=True, compress_front=True)
