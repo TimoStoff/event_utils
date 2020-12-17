@@ -7,7 +7,6 @@ Event based vision utility library. For additional detail, see the thesis docume
   school        = {Department of Electrical and Computer Systems Engineering, Monash University},
   year          = 2020
 }
-
 ```
 
 This is an event based vision utility library with functionality for focus optimisation, deep learning, event-stream noise augmentation, data format conversion and efficient generation of various event representations (event images, voxel grids etc).
