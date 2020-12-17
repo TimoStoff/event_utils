@@ -87,7 +87,7 @@ if __name__ == "__main__":
         raise Exception("Unknown visualization chosen: {}".format(args.visualization))
 
     for i, data in enumerate(tqdm(dataloader)):
-        #print("{}/{}: {}".format(i, len(dataloader), data['events'].shape))
+        print("{}/{}: {}".format(i, len(dataloader), data['events'].shape))
         xs, ys, ts, ps = dataloader.unpackage_events(data['events'])
         output_path = os.path.join(args.output_path, "frame_{:010d}.{}".format(i, args.filetype))
         visualizer.plot_events(data, output_path, **kwargs)

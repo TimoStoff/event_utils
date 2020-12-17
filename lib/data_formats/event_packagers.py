@@ -4,10 +4,10 @@ import cv2 as cv
 import numpy as np
 
 class packager():
-"""
-Abstract base class for classes that package event-based data to
-some storage format
-"""
+    """
+    Abstract base class for classes that package event-based data to
+    some storage format
+    """
     __metaclass__ = ABCMeta
 
     def __init__(self, name, output_path, max_buffer_size=1000000):

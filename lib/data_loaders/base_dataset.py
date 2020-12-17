@@ -207,13 +207,13 @@ class BaseVoxelDataset(Dataset):
 
     @staticmethod
     def preprocess_events(xs, ys, ts, ps):
-    """
-    Given empty events, return single zero event
-    @param xs x compnent of events
-    @param ys y compnent of events
-    @param ts t compnent of events
-    @param ps p compnent of events
-    """
+        """
+        Given empty events, return single zero event
+        @param xs x compnent of events
+        @param ys y compnent of events
+        @param ts t compnent of events
+        @param ps p compnent of events
+        """
         if len(xs) == 0:
             txs = np.zeros((1))
             tys = np.zeros((1))
@@ -329,6 +329,8 @@ class BaseVoxelDataset(Dataset):
         start_idx = 0
         for ts in self.frame_ts:
             end_index = self.find_ts_index(ts)
+            if end_index >= self.num_events:
+                end_index = self.num_events-1
             frame_indices.append([start_idx, end_index])
             start_idx = end_index
         return frame_indices

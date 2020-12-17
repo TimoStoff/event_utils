@@ -93,13 +93,12 @@ class EventsVisualizer(Visualizer):
             be in the format [top_left_y, top_left_x, height, width]
         """
         xs, ys, ts, ps = self.unpackage_events(data['events'])
-        if len(xs) < 2:
-            return
-        ys = self.sensor_size[0]-ys
-        xs = self.sensor_size[1]-xs if flip_x else xs
         imgs, img_ts = data['frame'], data['frame_ts']
         if not isinstance(imgs, list):
             imgs, img_ts = [imgs], [img_ts]
+
+        ys = self.sensor_size[0]-ys
+        xs = self.sensor_size[1]-xs if flip_x else xs
         #Crop events
         img_size = self.sensor_size
         if img_size is None:
@@ -107,6 +106,15 @@ class EventsVisualizer(Visualizer):
         crop = [0, img_size[0], 0, img_size[1]] if crop is None else crop
         xs, ys, ts, ps = clip_events_to_bounds(xs, ys, ts, ps, crop, set_zero=False)
         xs, ys = xs-crop[2], ys-crop[0]
+
+        if len(xs) < 2:
+            xs = np.array([0,0])
+            ys = np.array([0,0])
+            if img_ts is None:
+                ts = np.array([0,0])
+            else:
+                ts = np.array([img_ts[0], img_ts[0]+0.000001])
+            ps = np.array([0.,0.])
 
         #Defaults and range checks
         num_show = len(xs) if num_show == -1 else num_show
@@ -181,9 +189,9 @@ class EventsVisualizer(Visualizer):
         ax.set_zticks([])
         # Flush axes
         ax.set_xlim3d(0, img_size[1])
+        print(len(ts))
         ax.set_ylim3d(ts[0], ts[-1])
         ax.set_zlim3d(0,img_size[0])
-    
         #ax.xaxis.set_visible(False)
         #ax.axes.get_yaxis().set_visible(False)
 
