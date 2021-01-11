@@ -3,7 +3,7 @@ import os
 from tqdm import tqdm
 import numpy as np
 from lib.data_formats.read_events import read_memmap_events, read_h5_events_dict
-from lib.data_loaders import MemMapDataset, DynamicH5Dataset
+from lib.data_loaders import MemMapDataset, DynamicH5Dataset, NpyDataset
 from lib.visualization.visualizers import TimeStampImageVisualizer, EventImageVisualizer, \
         EventsVisualizer, VoxelVisualizer
 
@@ -20,9 +20,9 @@ if __name__ == "__main__":
                         help='which method should be used to visualize',
                         choices=['between_frames', 'k_events', 't_seconds', 'fixed_frames'])
     parser.add_argument('--w_width', type=float, default=0.01,
-                        help='new plot is formed every t seconds (required if voxel_method is t_seconds)')
+                        help='new plot is formed every t seconds/k events (required if voxel_method is t_seconds)')
     parser.add_argument('--sw_width', type=float,
-                        help='sliding_window size in seconds (required if voxel_method is t_seconds)')
+                        help='sliding_window size in seconds/events (required if voxel_method is t_seconds)')
     parser.add_argument('--num_frames', type=int, default=100, help='if fixed_frames chosen as voxel method, sets the number of frames')
 
     parser.add_argument('--visualization', type=str, default='events', choices=['events', 'voxels', 'event_image', 'ts_image'])
@@ -56,11 +56,12 @@ if __name__ == "__main__":
     parser.add_argument("--renderer", type=str, default="matplotlib", help="Which renderer to use (mayavi is faster)", choices=["matplotlib", "mayavi"])
     args = parser.parse_args()
 
-    #def __init__(self, data_path, transforms={}, sensor_resolution=None, num_bins=5,
-    #             voxel_method=None, max_length=None, combined_voxel_channels=False,
-    #             return_events=False, return_voxelgrid=True, return_frame=True, return_prev_frame=False,
-    #             return_flow=True, return_prev_flow=False):
-    loader_type = MemMapDataset if os.path.isdir(args.path) else DynamicH5Dataset
+    if os.path.isdir(args.path):
+        loader_type = MemMapDataset
+    elif os.path.splitext(args.path)[1] == ".npy":
+        loader_type = NpyDataset
+    else:
+        loader_type = DynamicH5Dataset
     dataloader = loader_type(args.path, voxel_method={'method':args.plot_method, 't':args.w_width,
         'k':args.w_width, 'sliding_window_t':args.sw_width, 'sliding_window_w':args.sw_width, 'num_frames':args.num_frames},
             return_events=True, return_voxelgrid=False, return_frame=True, return_flow=True, return_format='numpy')

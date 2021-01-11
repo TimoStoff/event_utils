@@ -158,6 +158,7 @@ class BaseVoxelDataset(Dataset):
         self.sensor_resolution = sensor_resolution
         self.data_source_idx = -1
         self.has_flow = False
+        self.has_frames = True
         self.return_format = return_format
         self.counter = 0
 
@@ -275,26 +276,27 @@ class BaseVoxelDataset(Dataset):
             if self.return_prev_frame:
                 item['prev_frame'] = self.transform_frame(self.get_frame(index), seed)
         else:
-            fi = self.frame_indices[index]
-            if self.return_frame:
+            if self.has_frames and self.return_frame:
+                fi = self.frame_indices[index]
                 if fi[0] != -1:
                     frames = [self.transform_frame(self.get_frame(fidx), seed) for fidx in range(fi[1]-fi[0])]
                     frame_ts = self.frame_ts[fi[0]:fi[1]]
-                else:
-                    frames = []
-                    frame_ts = []
-                item['frame'] = frames
-                item['frame_ts'] = frame_ts
+            else:
+                frames = []
+                frame_ts = []
+            item['frame'] = frames
+            item['frame_ts'] = frame_ts
 
-            if self.return_flow:
+            if self.has_flow and self.return_flow:
+                fi = self.frame_indices[index]
                 if fi[0] != -1 and self.has_flow:
                     flows = [self.transform_flow(self.get_flow(fidx), seed) for fidx in range(fi[0], fi[1], 1)]
                     flow_ts = self.frame_ts[fi[0]:fi[1]]
-                else:
-                    flows = []
-                    flow_ts = []
-                item['flow'] = flows
-                item['flow_ts'] = flow_ts
+            else:
+                flows = []
+                flow_ts = []
+            item['flow'] = flows
+            item['flow_ts'] = flow_ts
 
         if self.return_events:
             if self.return_format == 'torch':
@@ -406,7 +408,9 @@ class BaseVoxelDataset(Dataset):
             self.event_indices = self.compute_between_frame_indices()
         else:
             raise Exception("Invalid voxel forming method chosen ({})".format(self.voxel_method))
-        self.frame_indices = self.compute_per_frame_indices()
+        print("Dataset contains {} items".format(self.length))
+        if self.has_frames:
+            self.frame_indices = self.compute_per_frame_indices()
         if self.length == 0:
             raise Exception("Current voxel generation parameters lead to sequence length of zero")
 
@@ -422,7 +426,7 @@ class BaseVoxelDataset(Dataset):
         idx0, idx1 = self.event_indices[index]
         if not (idx0 >= 0 and idx1 <= self.num_events):
             raise Exception("WARNING: Event indices {},{} out of bounds 0,{}".format(idx0, idx1, self.num_events))
-        return idx0, idx1
+        return int(idx0), int(idx1)
 
     def get_voxel_grid(self, xs, ys, ts, ps, combined_voxel_channels=True):
         """
