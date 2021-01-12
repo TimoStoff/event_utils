@@ -1,6 +1,7 @@
 import h5py
 from ..util.event_util import binary_search_h5_dset
 from .base_dataset import BaseVoxelDataset
+import matplotlib.pyplot as plt
 
 class DynamicH5Dataset(BaseVoxelDataset):
     """

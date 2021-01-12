@@ -87,11 +87,15 @@ if __name__ == "__main__":
     else:
         raise Exception("Unknown visualization chosen: {}".format(args.visualization))
 
+    plot_data = {'events':np.ones((0, 4)), 'frame':[], 'frame_ts':[]}
     for i, data in enumerate(tqdm(dataloader)):
-        print("{}/{}: {}".format(i, len(dataloader), data['events'].shape))
-        xs, ys, ts, ps = dataloader.unpackage_events(data['events'])
+        plot_data['events'] = np.concatenate((plot_data['events'], data['events']))
+        plot_data['frame'].append(data['frame'])
+        plot_data['frame_ts'].append(data['frame_ts'])
         output_path = os.path.join(args.output_path, "frame_{:010d}.{}".format(i, args.filetype))
-        visualizer.plot_events(data, output_path, **kwargs)
+        if i%args.skip_frames == 0:
+            visualizer.plot_events(plot_data, output_path, **kwargs)
+            plot_data = {'events':np.ones((0, 4)), 'frame':[], 'frame_ts':[]}
 
     #if args.plot_method == 'between_frames':
     #    if args.renderer == "mayavi":

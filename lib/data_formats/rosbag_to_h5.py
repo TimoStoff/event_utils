@@ -100,8 +100,8 @@ def extract_rosbag(rosbag_path, output_path, event_topic, image_topic=None,
 
             elif topic == event_topic:
                 event_msg_sum += 1
-                if event_msg_sum % num_msgs_between_logs == 0 or event_msg_sum >= num_event_msgs - 1:
-                    print('Event messages: {} / {}'.format(event_msg_sum + 1, num_event_msgs))
+                #if event_msg_sum % num_msgs_between_logs == 0 or event_msg_sum >= num_event_msgs - 1:
+                #    print('Event messages: {} / {}'.format(event_msg_sum + 1, num_event_msgs))
                 for e in msg.events:
                     timestamp = timestamp_float(e.ts)-(first_ts if zero_timestamps else 0)
                     xs.append(e.x)

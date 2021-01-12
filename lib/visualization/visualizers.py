@@ -147,14 +147,14 @@ class EventsVisualizer(Visualizer):
 
                 ax.scatter(xs[0:event_idx], ts[0:event_idx], ys[0:event_idx], zdir='z',
                         c=colors[0:event_idx], facecolors=colors[0:event_idx],
-                        s=np.ones(xs.shape)*event_size, marker=marker, linewidths=0, alpha=1.0 if show_events else 0)
+                        s=event_size, marker=marker, linewidths=0, alpha=1.0 if show_events else 0)
 
                 img = cv.normalize(img, None, 0, 1, cv.NORM_MINMAX)
                 ax.plot_surface(y, img_ts, x, rstride=stride, cstride=stride, facecolors=img, alpha=1)
 
                 ax.scatter(xs[event_idx:-1], ts[event_idx:-1], ys[event_idx:-1], zdir='z',
                         c=colors[event_idx:-1], facecolors=colors[event_idx:-1],
-                        s=np.ones(xs.shape)*event_size, marker=marker, linewidths=0, alpha=1.0 if show_events else 0)
+                        s=event_size, marker=marker, linewidths=0, alpha=1.0 if show_events else 0)
     
         elif num_compress > 0:
             # Plot events
@@ -189,7 +189,6 @@ class EventsVisualizer(Visualizer):
         ax.set_zticks([])
         # Flush axes
         ax.set_xlim3d(0, img_size[1])
-        print(len(ts))
         ax.set_ylim3d(ts[0], ts[-1])
         ax.set_zlim3d(0,img_size[0])
         #ax.xaxis.set_visible(False)
