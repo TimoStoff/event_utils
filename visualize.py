@@ -55,6 +55,8 @@ if __name__ == "__main__":
             syntax, eg for a crop of 10x20 starting from point 30,40 use: 10x20+30+40.")
     parser.add_argument("--renderer", type=str, default="matplotlib", help="Which renderer to use (mayavi is faster)", choices=["matplotlib", "mayavi"])
     args = parser.parse_args()
+    if not os.path.exists(args.output_path):
+        os.makedirs(args.output_path)
 
     if os.path.isdir(args.path):
         loader_type = MemMapDataset
@@ -88,10 +90,16 @@ if __name__ == "__main__":
         raise Exception("Unknown visualization chosen: {}".format(args.visualization))
 
     plot_data = {'events':np.ones((0, 4)), 'frame':[], 'frame_ts':[]}
+    print("{} frames in sequence".format(len(dataloader)))
     for i, data in enumerate(tqdm(dataloader)):
         plot_data['events'] = np.concatenate((plot_data['events'], data['events']))
-        plot_data['frame'].append(data['frame'])
-        plot_data['frame_ts'].append(data['frame_ts'])
+        if args.plot_method == 'between_frames':
+            plot_data['frame'].append(data['frame'])
+            plot_data['frame_ts'].append(data['frame_ts'])
+        else:
+            plot_data['frame'] = data['frame']
+            plot_data['frame_ts'] = data['frame_ts']
+
         output_path = os.path.join(args.output_path, "frame_{:010d}.{}".format(i, args.filetype))
         if i%args.skip_frames == 0:
             visualizer.plot_events(plot_data, output_path, **kwargs)

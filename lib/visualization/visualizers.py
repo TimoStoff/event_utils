@@ -94,7 +94,7 @@ class EventsVisualizer(Visualizer):
         """
         xs, ys, ts, ps = self.unpackage_events(data['events'])
         imgs, img_ts = data['frame'], data['frame_ts']
-        if not isinstance(imgs, list):
+        if not (isinstance(imgs, list) or isinstance(imgs, tuple)):
             imgs, img_ts = [imgs], [img_ts]
 
         ys = self.sensor_size[0]-ys
@@ -149,7 +149,8 @@ class EventsVisualizer(Visualizer):
                         c=colors[0:event_idx], facecolors=colors[0:event_idx],
                         s=event_size, marker=marker, linewidths=0, alpha=1.0 if show_events else 0)
 
-                img = cv.normalize(img, None, 0, 1, cv.NORM_MINMAX)
+                img /= 255.0
+                #img = cv.normalize(img, None, 0, 1, cv.NORM_MINMAX)
                 ax.plot_surface(y, img_ts, x, rstride=stride, cstride=stride, facecolors=img, alpha=1)
 
                 ax.scatter(xs[event_idx:-1], ts[event_idx:-1], ys[event_idx:-1], zdir='z',

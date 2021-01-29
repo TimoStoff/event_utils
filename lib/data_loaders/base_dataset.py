@@ -276,25 +276,23 @@ class BaseVoxelDataset(Dataset):
             if self.return_prev_frame:
                 item['prev_frame'] = self.transform_frame(self.get_frame(index), seed)
         else:
+            frames = []
+            frame_ts = []
             if self.has_frames and self.return_frame:
                 fi = self.frame_indices[index]
                 if fi[0] != -1:
                     frames = [self.transform_frame(self.get_frame(fidx), seed) for fidx in range(fi[1]-fi[0])]
                     frame_ts = self.frame_ts[fi[0]:fi[1]]
-            else:
-                frames = []
-                frame_ts = []
             item['frame'] = frames
             item['frame_ts'] = frame_ts
 
+            flows = []
+            flow_ts = []
             if self.has_flow and self.return_flow:
                 fi = self.frame_indices[index]
                 if fi[0] != -1 and self.has_flow:
                     flows = [self.transform_flow(self.get_flow(fidx), seed) for fidx in range(fi[0], fi[1], 1)]
                     flow_ts = self.frame_ts[fi[0]:fi[1]]
-            else:
-                flows = []
-                flow_ts = []
             item['flow'] = flows
             item['flow_ts'] = flow_ts
 
@@ -375,7 +373,7 @@ class BaseVoxelDataset(Dataset):
         """
         frame_indices = []
         for indices in self.event_indices:
-            s_t, e_t = self.ts(indices[0]), self.ts(indices[1])
+            s_t, e_t = self.ts(int(indices[0])), self.ts(int(indices[1]))
             idx0 = min(np.searchsorted(self.frame_ts, s_t), len(self.frame_ts)-1)
             idx1 = min(np.searchsorted(self.frame_ts, e_t), len(self.frame_ts)-1)
             if idx0 == idx1:
@@ -394,9 +392,13 @@ class BaseVoxelDataset(Dataset):
         self.voxel_method = voxel_method
         if self.voxel_method['method'] == 'k_events':
             self.length = max(int(self.num_events / (voxel_method['k'] - voxel_method['sliding_window_w'])), 0)
+            if self.length == 0:
+                print("num_events={}, t={}, window={}".format(self.num_events, voxel_method['k'], voxel_method['sliding_window_w']))
             self.event_indices = self.compute_k_indices()
         elif self.voxel_method['method'] == 't_seconds':
             self.length = max(int(self.duration / (voxel_method['t'] - voxel_method['sliding_window_t'])), 0)
+            if self.length == 0:
+                print("duration={}, t={}, window={}".format(self.duration, voxel_method['t'], voxel_method['sliding_window_t']))
             self.event_indices = self.compute_timeblock_indices()
         elif self.voxel_method['method'] == 'fixed_frames':
             self.length = self.voxel_method['num_frames']
